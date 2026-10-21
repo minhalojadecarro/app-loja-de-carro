@@ -1,12 +1,18 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-import { cloudflare } from "@cloudflare/vite-plugin";
-
 export default defineConfig({
-  plugins: [react(), cloudflare()],
+  plugins: [react()],
+  base: '/', // <--- Adicione esta linha para corrigir o caminho dos assets em produção
   server: {
-    port: 3000,
-    open: true // Opcional: abre o navegador automaticamente na porta 3000
-  }
+    port: 5174,
+    open: true,
+    proxy: {
+      '/api-fipe': {
+        target: 'https://parallelum.com.br/fipe/api/v1',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-fipe/, ''),
+      },
+    },
+  },
 });

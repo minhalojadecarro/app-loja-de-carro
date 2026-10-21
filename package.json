@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 3000",
+    "dev": "vite --port 5174",
     "dev:3000": "vite --port 3000",
     "dev:5174": "vite --port 5174",
+    "dev:prod": "vite --port 3001",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "npm run build && wrangler dev",
@@ -15,7 +16,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.64.0",

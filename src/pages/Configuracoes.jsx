@@ -3,15 +3,17 @@ import { supabase } from '../supabaseClient';
 
 export default function Configuracoes({ session, tenant }) {
   const tenantId = tenant?.id || session?.user?.id;
+  const userId = session?.user?.id;
   
-  // Estados da Loja, Perfil e Logo
+  // Estados da Loja (ficam na tabela tenants)
   const [nomeLoja, setNomeLoja] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
+
+  // Estados da Logo e Foto de Perfil (agora centralizados na tabela profiles)
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [logoUrl, setLogoUrl] = useState('');
 
-  // Estados da Foto de Perfil (Avatar)
   const [fotoFile, setFotoFile] = useState(null);
   const [fotoPreview, setFotoPreview] = useState(null);
   const [fotoPerfilUrl, setFotoPerfilUrl] = useState('');
@@ -28,31 +30,44 @@ export default function Configuracoes({ session, tenant }) {
 
   useEffect(() => {
     async function carregarDados() {
-      if (!tenantId) return;
+      const userId = session?.user?.id;
+      if (!userId) return;
 
-      const { data } = await supabase
-        .from('tenants')
-        .select('*')
-        .eq('id', tenantId)
-        .single();
+      // Busca dados centralizados de perfil em profiles
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('foto_perfil_url, logo_url, nome')
+        .eq('id', userId)
+        .maybeSingle();
 
-      if (data) {
-        setNomeLoja(data.nome_loja || data.nome || '');
-        setWhatsapp(data.whatsapp || '');
-        setLogoUrl(data.logo_url || '');
-        setFotoPerfilUrl(data.foto_perfil_url || '');
+      if (profileData) {
+        if (profileData.foto_perfil_url) setFotoPerfilUrl(profileData.foto_perfil_url);
+        if (profileData.logo_url) setLogoUrl(profileData.logo_url);
+        if (profileData.nome) setNomeLoja(profileData.nome);
+      }
 
-        // Carrega os dados bancários
-        setBanco(data.banco || '');
-        setAgencia(data.agencia || '');
-        setContaCorrente(data.conta_corrente || '');
-        setTipoChavePix(data.tipo_chave_pix || '');
-        setChavePix(data.chave_pix || '');
-        setTitularConta(data.titular_conta || '');
+      // Busca dados específicos de loja em tenants
+      if (tenantId) {
+        const { data: tenantData } = await supabase
+          .from('tenants')
+          .select('*')
+          .eq('id', tenantId)
+          .maybeSingle();
+
+        if (tenantData) {
+          if (!profileData?.nome) setNomeLoja(tenantData.nome_loja || tenantData.nome || '');
+          setWhatsapp(tenantData.whatsapp || '');
+          setBanco(tenantData.banco || '');
+          setAgencia(tenantData.agencia || '');
+          setContaCorrente(tenantData.conta_corrente || '');
+          setTipoChavePix(tenantData.tipo_chave_pix || '');
+          setChavePix(tenantData.chave_pix || '');
+          setTitularConta(tenantData.titular_conta || '');
+        }
       }
     }
     carregarDados();
-  }, [tenantId]);
+  }, [tenantId, session]);
 
   // Manipular seleção do arquivo da Logo
   const handleLogoChange = (e) => {
@@ -74,8 +89,11 @@ export default function Configuracoes({ session, tenant }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!tenantId) {
-      alert('Usuário não identificado.');
+    
+    // Pega com precisão o ID do usuário logado
+    const userId = session?.user?.id;
+    if (!userId) {
+      alert('Usuário não autenticado.');
       return;
     }
 
@@ -85,10 +103,10 @@ export default function Configuracoes({ session, tenant }) {
       let novaLogoUrl = logoUrl;
       let novaFotoUrl = fotoPerfilUrl;
 
-      // Upload da Logo se alterada
+      // 1. Upload da Logo se alterada
       if (logoFile) {
         const fileExt = logoFile.name.split('.').pop();
-        const fileName = `logo-${tenantId}-${Date.now()}.${fileExt}`;
+        const fileName = `logo-${userId}-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
           .from('logos')
           .upload(fileName, logoFile, { upsert: true });
@@ -102,10 +120,10 @@ export default function Configuracoes({ session, tenant }) {
         novaLogoUrl = publicUrlData.publicUrl;
       }
 
-      // Upload da Foto de Perfil se alterada
+      // 2. Upload da Foto de Perfil se alterada
       if (fotoFile) {
         const fileExt = fotoFile.name.split('.').pop();
-        const fileName = `perfil-${tenantId}-${Date.now()}.${fileExt}`;
+        const fileName = `perfil-${userId}-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
           .from('logos')
           .upload(fileName, fotoFile, { upsert: true });
@@ -119,26 +137,49 @@ export default function Configuracoes({ session, tenant }) {
         novaFotoUrl = publicUrlData.publicUrl;
       }
 
-      // Atualização no Supabase utilizando foto_perfil_url
-      const { error: updateError } = await supabase
-        .from('tenants')
-        .update({
-          nome_loja: nomeLoja,
-          nome: nomeLoja,
-          whatsapp: whatsapp,
-          logo_url: novaLogoUrl,
-          foto_perfil_url: novaFotoUrl,
-          banco: banco,
-          agencia: agencia,
-          conta_corrente: contaCorrente,
-          tipo_chave_pix: tipoChavePix,
-          chave_pix: chavePix,
-          titular_conta: titularConta
-        })
-        .eq('id', tenantId);
+      // 3. Upsert na tabela PROFILES incluindo o email obrigatório
+      const { error: profileUpdateError } = await supabase
+        .from('profiles')
+        .upsert(
+          {
+            id: userId,
+            email: session?.user?.email, // <--- CAMPO OBRIGATÓRIO (NOT NULL)
+            foto_perfil_url: novaFotoUrl,
+            logo_url: novaLogoUrl,
+            nome: nomeLoja || 'Minha Loja de Carro',
+            // Preserva o is_admin do estado atual ou define false se não existir
+            is_admin: userProfile?.is_admin ?? false,
+          },
+          { onConflict: 'id' }
+        );
 
-      if (updateError) throw updateError;
+      if (profileUpdateError) {
+        console.error('Erro no Supabase Profiles:', profileUpdateError);
+        throw new Error(`Profiles: ${profileUpdateError.message}`);
+      }
+      // -------------------------------------------------------------
+      // 4. ATUALIZAÇÃO OPCIONAL NA TABELA TENANTS (Apenas se for Lojista)
+      // -------------------------------------------------------------
+      if (tenantId) {
+        await supabase
+          .from('tenants')
+          .update({
+            nome_loja: nomeLoja,
+            nome: nomeLoja,
+            whatsapp: whatsapp,
+            logo_url: novaLogoUrl,
+            foto_perfil_url: novaFotoUrl,
+            banco: banco,
+            agencia: agencia,
+            conta_corrente: contaCorrente,
+            tipo_chave_pix: tipoChavePix,
+            chave_pix: chavePix,
+            titular_conta: titularConta
+          })
+          .eq('id', tenantId);
+      }
 
+      // Atualiza estados locais de exibição
       setLogoUrl(novaLogoUrl);
       setLogoFile(null);
       setLogoPreview(null);
@@ -147,7 +188,7 @@ export default function Configuracoes({ session, tenant }) {
       setFotoFile(null);
       setFotoPreview(null);
 
-      alert('Configurações, perfil e dados bancários salvos com sucesso!');
+      alert('Configurações e foto de perfil salvas com sucesso!');
       window.location.reload();
     } catch (error) {
       console.error('Erro ao salvar:', error.message);

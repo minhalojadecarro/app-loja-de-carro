@@ -58,7 +58,8 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     }
 
     try {
-      const res = await fetch('https://parallelum.com.br/fipe/api/v1/carros/marcas');
+      // AJUSTADO: Usando o proxy /api-fipe do Vite para evitar erro de CORS
+      const res = await fetch('/api-fipe/carros/marcas');
       const data = await res.json();
       if (Array.isArray(data)) {
         setMarcasApi(data);
@@ -166,7 +167,8 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     if (!marcaCod) return;
 
     try {
-      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaCod}/modelos`);
+      // AJUSTADO: Usando o proxy /api-fipe
+      const res = await fetch(`/api-fipe/carros/marcas/${marcaCod}/modelos`);
       const data = await res.json();
       if (data && Array.isArray(data.modelos)) {
         setModelosApi(data.modelos);
@@ -193,7 +195,8 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     if (!marcaObj.id || !modeloCod) return;
 
     try {
-      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaObj.id}/modelos/${modeloCod}/anos`);
+      // AJUSTADO: Usando o proxy /api-fipe
+      const res = await fetch(`/api-fipe/carros/marcas/${marcaObj.id}/modelos/${modeloCod}/anos`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setAnosApi(data);
@@ -216,7 +219,8 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     if (!marcaObj.id || !modeloObj.id || !anoCod) return;
 
     try {
-      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaObj.id}/modelos/${modeloObj.id}/anos/${anoCod}`);
+      // AJUSTADO: Usando o proxy /api-fipe
+      const res = await fetch(`/api-fipe/carros/marcas/${marcaObj.id}/modelos/${modeloObj.id}/anos/${anoCod}`);
       const data = await res.json();
       
       if (data) {
@@ -339,7 +343,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
       cambio,
       foto_principal_url: fotoUrl,
       destaque_home: destaqueHome,
-      status: 'Disponível' // <--- ADICIONE ESTA LINHA
+      status: 'Disponível'
     };
 
     if (editingId) {

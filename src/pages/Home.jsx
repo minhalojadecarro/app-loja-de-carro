@@ -1,9 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { Link } from 'react-router-dom';
 
 export default function Home({ session, tenant, adminLogo, onNavigateRegister, onNavigateVitrine }) {
   const [veiculosDestaque, setVeiculosDestaque] = useState([]);
   const [loadingDestaques, setLoadingDestaques] = useState(true);
+  const [copiado, setCopiado] = useState(false);
+
+  // Função robusta de compartilhamento com fallback triplo
+  const handleShare = async () => {
+    const urlSite = window.location.href; // ou window.location.origin
+
+    // 1. Tenta usar o Share API nativo (Mobile/Android/iOS/Safari)
+    if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      try {
+        await navigator.share({
+          title: 'Minha Loja de Carro',
+          text: 'Confira nossa vitrine virtual de veículos!',
+          url: urlSite,
+        });
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return; // Usuário apenas fechou a janela de share
+      }
+    }
+
+    // 2. Tenta a API Moderna do Clipboard (para Desktop/Navegadores modernos)
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(urlSite);
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 3000);
+        return;
+      } catch (err) {
+        console.warn('Erro ao usar navigator.clipboard, usando fallback antigo:', err);
+      }
+    }
+
+    // 3. Fallback Infalível para Desktop / HTTP / Navegadores antigos (Input Temporário)
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = urlSite;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+
+      if (successful) {
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 3000);
+      } else {
+        alert(`Copie o link da loja: ${urlSite}`);
+      }
+    } catch (err) {
+      alert(`Copie o link da loja: ${urlSite}`);
+    }
+  };
 
   useEffect(() => {
     const fetchDestaques = async () => {
@@ -60,7 +117,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
           🔥 A plataforma ideal para revendas e autônomos
         </span>
 
-        {/* TÍTULO COM QUEBRA DE LINHA E SEM WHITESPACE-NOWRAP */}
+        {/* TÍTULO COM QUEBRA DE LINHA */}
         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight max-w-4xl">
           Sua revenda de carros no <br />
           <span className="text-blue-500 block sm:inline mt-1 sm:mt-0">
@@ -72,6 +129,37 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
         <p className="text-gray-200 text-base sm:text-lg leading-relaxed max-w-2xl font-normal">
           Crie sua vitrine virtual profissional em minutos, gerencie o estoque e receba compradores qualificados direto no WhatsApp.
         </p>
+
+        {/* BOTOES DE AÇÃO E COMPARTILHAMENTO */}
+        <div className="flex flex-wrap items-center gap-4 pt-4">
+          {!session ? (
+            <Link
+              to="/login"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-blue-900/50 transition transform hover:scale-105 inline-block text-center"
+            >
+              Criar Minha Loja Agora →
+            </Link>
+          ) : (
+            <Link
+              to="/estoque"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-blue-900/50 transition transform hover:scale-105 inline-block text-center"
+            >
+              Acessar Meu Painel →
+            </Link>
+          )}
+
+          {/* BOTÃO NATIVO DE COMPARTILHAMENTO */}
+          <button
+            onClick={handleShare}
+            className="bg-gray-900 hover:bg-gray-800 text-gray-200 font-semibold px-6 py-4 rounded-xl border border-gray-800 shadow-lg transition flex items-center gap-2 transform hover:scale-105 cursor-pointer text-sm sm:text-base"
+            title="Compartilhar plataforma"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684" />
+            </svg>
+            {copiado ? 'Link Copiado! 🚀' : 'Compartilhar Site'}
+          </button>
+        </div>
       </section>
 
       {/* SEÇÃO DE VEÍCULOS EM DESTAQUE */}
@@ -175,12 +263,12 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
         {/* Botão Criar Minha Loja Agora */}
         {!session && (
           <div className="flex justify-center pt-12 pb-6">
-            <button
-              onClick={onNavigateRegister}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-blue-900/50 transition transform hover:scale-105"
+            <Link
+              to="/login"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-blue-900/50 transition transform hover:scale-105 inline-block text-center"
             >
-              Criar Minha Loja Agora →
-            </button>
+              Criar Loja Agora →
+            </Link>
           </div>
         )}
       </section>
@@ -261,7 +349,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
               </span>
               <h3 className="text-xl font-bold">Crie sua Conta</h3>
               <p className="text-amber-300 text-sm leading-relaxed font-semibold">
-                Compartilhe o seu link exclusivo e receba clientes interessados direto no seu WhatsApp.
+                Faça o cadastro da sua loja em menos de 1 minuto e obtenha o seu endereço exclusivo na plataforma.
               </p>
             </div>
 
@@ -272,7 +360,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
               </span>
               <h3 className="text-xl font-bold">Adicione seus Carros</h3>
               <p className="text-amber-300 text-sm leading-relaxed font-semibold">
-                Compartilhe o seu link exclusivo e receba clientes interessados direto no seu WhatsApp.
+                Cadastre os veículos do seu pátio com fotos, detalhes, ano e valor de forma rápida e intuitiva.
               </p>
             </div>
 
@@ -300,13 +388,13 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
             Experimente por 30 dias totalmente grátis. Crie seu catálogo profissional agora mesmo.
           </p>
           {!session && (
-            <div className="pt-4">
-              <button
-                onClick={onNavigateRegister}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-blue-900/50 transition text-lg transform hover:scale-105"
+            <div className="flex justify-center pt-6">
+              <Link
+                to="/login"
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-blue-900/50 transition transform hover:scale-105 inline-block text-center text-lg"
               >
                 Começar Agora Grátis →
-              </button>
+              </Link>
             </div>
           )}
         </div>

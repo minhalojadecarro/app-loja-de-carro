@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 export default function Sobre({ onNavigatePlanos }) {
   return (
@@ -57,12 +58,12 @@ export default function Sobre({ onNavigatePlanos }) {
             Aproveite nossos planos sob medida com excelente custo-benefício e comece hoje mesmo a escalar sua revenda.
           </p>
           <div className="pt-4">
-            <button
-              onClick={onNavigatePlanos}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-2xl shadow-xl shadow-blue-900/50 transition transform hover:-translate-y-0.5 text-base tracking-wide"
+            <Link
+              to="/planos"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-2xl shadow-xl shadow-blue-900/50 transition transform hover:-translate-y-0.5 text-base tracking-wide inline-block"
             >
               VER PLANOS DE ASSINATURA &rarr;
-            </button>
+            </Link>
           </div>
         </div>
       </div>

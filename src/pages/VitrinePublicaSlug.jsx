@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom'; // 1. Importar o useParams
 import { supabase } from '../supabaseClient';
 
-export default function VitrinePublicaSlug({ slug }) {
+export default function VitrinePublicaSlug() {
+  const { slug } = useParams(); // 2. Capturar o slug diretamente da URL (ex: /carrobarato)
+  
   const [tenant, setTenant] = useState(null);
   const [veiculos, setVeiculos] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // ... o restante do código continua exatamente igual abaixo
 
   useEffect(() => {
     const fetchLojaEValores = async () => {
