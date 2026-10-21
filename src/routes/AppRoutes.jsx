@@ -52,7 +52,12 @@ export function AppRoutes({ session, tenantData, isAdmin, selectedStore, setSele
       {/* ROTA DE TESTE RÁPIDO */}
       <Route 
         path="/:slug" 
-        element={<VitrinePublicaSlug />} />
+        element={
+          <div style={{ padding: '50px', color: 'white', background: 'red', textAlign: 'center', fontSize: '24px' }}>
+            TESTE DE ROTA SLUG ABERTO COM SUCESSO!
+          </div>
+        } 
+      />
      </Routes>
   );
 }
