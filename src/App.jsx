@@ -15,6 +15,7 @@ function AppContent() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const navigate = useNavigate();
+  // ajuste de rota).
 
   // Handler para navegar até a página de registro/login
   const handleNavigateRegister = () => {
