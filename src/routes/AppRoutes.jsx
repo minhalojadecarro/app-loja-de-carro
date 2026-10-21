@@ -52,9 +52,8 @@ export function AppRoutes({ session, tenantData, isAdmin, selectedStore, setSele
       {/* ROTA DE TESTE RÁPIDO */}
       <Route 
         path="/:slug" 
-        element={<h1>TESTE FUNCIONOU: ACHEI O SLUG!</h1>} 
-      />
-    </Routes>
+        element={<VitrinePublicasSlug />} />
+     </Routes>
   );
 }
  
