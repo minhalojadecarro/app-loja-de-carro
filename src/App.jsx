@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Link, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { AppRoutes } from './routes/AppRoutes';
+import Auth from './components/Auth';
 
 function AppContent() {
   const [session, setSession] = useState(null);
