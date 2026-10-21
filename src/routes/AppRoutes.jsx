@@ -14,6 +14,7 @@ import Relatorios from '../pages/Relatorios';
 import Planos from '../components/Planos';
 import Auth from '../components/Auth';
 import Assinatura from '../Assinatura';
+import VitrinePublicaSlug from '../pages/VitrinePublicaSlug';
 
 export function AppRoutes({ session, tenantData, isAdmin, selectedStore, setSelectedStore }) {
   return (
@@ -52,7 +53,7 @@ export function AppRoutes({ session, tenantData, isAdmin, selectedStore, setSele
       {/* ROTA DE TESTE RÁPIDO */}
       <Route 
         path="/:slug" 
-        element={<VitrinePublicasSlug />} />
+        element={<VitrinePublicaSlug />} />
      </Routes>
   );
 }
