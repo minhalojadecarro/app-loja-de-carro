@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function Home({ session, tenant, adminLogo, onNavigateRegister, onNavigateVitrine }) {
+  // 1. Declare o navigate e os estados logo no topo da função principal
+  const navigate = useNavigate();
   const [veiculosDestaque, setVeiculosDestaque] = useState([]);
   const [loadingDestaques, setLoadingDestaques] = useState(true);
   const [copiado, setCopiado] = useState(false);
@@ -244,7 +246,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
                         const slugLoja = carro.tenants?.slug || carro.tenants?.nome_loja || carro.tenants?.nome;
                         if (slugLoja) {
                           const slugFormatado = String(slugLoja).toLowerCase().replace(/\s+/g, '-');
-                          window.location.href = `/${slugFormatado}`;
+                          navigate(`/${slugFormatado}`);
                         } else if (typeof onNavigateVitrine === 'function') {
                           onNavigateVitrine(carro.tenant_id, carro.tenants);
                         }
