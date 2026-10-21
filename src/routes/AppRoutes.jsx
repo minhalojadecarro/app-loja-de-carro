@@ -49,12 +49,11 @@ export function AppRoutes({ session, tenantData, isAdmin, selectedStore, setSele
       <Route path="/assinaturas" element={<Assinatura />} />
       <Route path="/lojas" element={<Lojas />} />
 
-      {/* ROTA DE TESTE RÁPIDO */}
+      {/* Rota Pública Oficial: Carrega a Vitrine do Lojista via Slug (ex: /#/carro-barato) */}
       <Route 
         path="/:slug" 
         element={<VitrinePublicaSlug />} 
       />
-     </Routes>
+    </Routes>
   );
 }
- 
