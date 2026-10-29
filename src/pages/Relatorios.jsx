@@ -96,24 +96,49 @@ export default function Relatorios({ session, tenant }) {
   }, 0);
 
 
-  // ==========================================
-  // LÓGICA DO LOJISTA (VENDAS DE VEÍCULOS)
-  // ==========================================
   const fetchVendasLojista = async () => {
     setLoadingLojista(true);
     try {
-      const tenantIdAtual = session?.user?.id;
-      let query = supabase
+      const userId = session?.user?.id;
+      if (!userId) {
+        setVeiculosVendidos([]);
+        setLoadingLojista(false);
+        return;
+      }
+
+      // 1. Descobre o ID correto do tenant na tabela tenants obrigatoriamente
+      let tenantIdAtual = tenant?.id;
+
+      if (!tenantIdAtual) {
+        const { data: tenantData, error: tenantError } = await supabase
+          .from('tenants')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (tenantError) throw tenantError;
+
+        if (tenantData?.id) {
+          tenantIdAtual = tenantData.id;
+        }
+      }
+
+      // Se mesmo assim não encontrou o tenant_id, encerra sem disparar erro 400
+      if (!tenantIdAtual) {
+        console.warn('Nenhum tenant associado encontrado para este usuário.');
+        setVeiculosVendidos([]);
+        setLoadingLojista(false);
+        return;
+      }
+
+      // 2. Executa a busca na tabela veiculos com o ID validado
+      const { data, error } = await supabase
         .from('veiculos')
         .select('*')
+        .eq('tenant_id', tenantIdAtual)
         .eq('status', 'Vendido')
         .order('updated_at', { ascending: false });
 
-      if (tenantIdAtual) {
-        query = query.eq('tenant_id', tenantIdAtual);
-      }
-
-      const { data, error } = await query;
       if (error) throw error;
       setVeiculosVendidos(data || []);
     } catch (error) {

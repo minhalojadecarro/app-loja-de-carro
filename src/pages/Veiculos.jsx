@@ -6,7 +6,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
   const [veiculos, setVeiculos] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [veiculoFinanceiroModal, setVeiculoFinanceiroModal] = useState(null);
-  const [showCadastroModal, setShowCadastroModal] = useState(false); // Estado para abrir/fechar o modal de cadastro
+  const [showCadastroModal, setShowCadastroModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -58,8 +58,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     }
 
     try {
-      // AJUSTADO: Usando o proxy /api-fipe do Vite para evitar erro de CORS
-      const res = await fetch('/api-fipe/carros/marcas');
+      const res = await fetch('https://parallelum.com.br/fipe/api/v1/carros/marcas');
       const data = await res.json();
       if (Array.isArray(data)) {
         setMarcasApi(data);
@@ -82,7 +81,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
         return {
           ...v,
           tenants: {
-            nome: loja?.nome_loja || loja?.nome || loja?.name || 'Revenda Parceira',
+            nome: loja?.nome_loja || loja?.nome || loja?.name || 'Revenda sem Parceira',
             whatsapp: loja?.whatsapp || ''
           }
         };
@@ -167,8 +166,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     if (!marcaCod) return;
 
     try {
-      // AJUSTADO: Usando o proxy /api-fipe
-      const res = await fetch(`/api-fipe/carros/marcas/${marcaCod}/modelos`);
+      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaCod}/modelos`);
       const data = await res.json();
       if (data && Array.isArray(data.modelos)) {
         setModelosApi(data.modelos);
@@ -195,8 +193,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     if (!marcaObj.id || !modeloCod) return;
 
     try {
-      // AJUSTADO: Usando o proxy /api-fipe
-      const res = await fetch(`/api-fipe/carros/marcas/${marcaObj.id}/modelos/${modeloCod}/anos`);
+      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaObj.id}/modelos/${modeloCod}/anos`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setAnosApi(data);
@@ -219,8 +216,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     if (!marcaObj.id || !modeloObj.id || !anoCod) return;
 
     try {
-      // AJUSTADO: Usando o proxy /api-fipe
-      const res = await fetch(`/api-fipe/carros/marcas/${marcaObj.id}/modelos/${modeloObj.id}/anos/${anoCod}`);
+      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaObj.id}/modelos/${modeloObj.id}/anos/${anoCod}`);
       const data = await res.json();
       
       if (data) {
@@ -256,9 +252,10 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     setCor(veiculo.cor || '');
     setCambio(veiculo.cambio || '');
     setFotoUrl(veiculo.foto_principal_url || '');
-    setDestaqueHome(Boolean(veiculo.destaque_home));
+    // Atualizado para checar o status_destaque da fila
+    setDestaqueHome(veiculo.status_destaque === 'em_evidencia');
     
-    setShowCadastroModal(true); // Abre o modal automaticamente ao editar
+    setShowCadastroModal(true);
   };
 
   const handleDelete = async (id) => {
@@ -273,11 +270,17 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     }
   };
 
-  const handleToggleDestaque = async (veiculoId, estadoAtual) => {
-    const novoEstado = !estadoAtual;
+  const handleToggleDestaque = async (veiculoId, statusAtual) => {
+    const novoStatus = statusAtual === 'em_evidencia' ? 'normal' : 'em_evidencia';
+    const dadosUpdate = {
+      status_destaque: novoStatus,
+      data_inicio_destaque: novoStatus === 'em_evidencia' ? new Date().toISOString() : null,
+      data_fim_destaque: novoStatus === 'em_evidencia' ? new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString() : null
+    };
+
     const { error } = await supabase
       .from('veiculos')
-      .update({ destaque_home: novoEstado })
+      .update(dadosUpdate)
       .eq('id', veiculoId);
 
     if (error) {
@@ -303,7 +306,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     setCambio('');
     setFotoUrl('');
     setDestaqueHome(false);
-    setShowCadastroModal(false); // Fecha o modal
+    setShowCadastroModal(false);
   };
 
   const handleSubmit = async (e) => {
@@ -313,7 +316,21 @@ export default function Veiculos({ session, tenant, isAdmin }) {
 
     if (!idTenantFinal) {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
-      idTenantFinal = currentSession?.user?.id;
+      const currentUserId = currentSession?.user?.id;
+
+      if (currentUserId) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('tenant_id')
+          .eq('id', currentUserId)
+          .maybeSingle();
+
+        if (profileData?.tenant_id) {
+          idTenantFinal = profileData.tenant_id;
+        } else {
+          idTenantFinal = currentUserId;
+        }
+      }
     }
 
     if (eAdministrador && !idTenantFinal && tenants.length > 0) {
@@ -321,7 +338,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     }
 
     if (!idTenantFinal) {
-      alert('Erro crítico: Sessão não encontrada. Por favor, faça login novamente.');
+      alert('Erro crítico: ID da Loja (Tenant) não encontrado. Verifique o seu cadastro.');
       return;
     }
 
@@ -342,7 +359,9 @@ export default function Veiculos({ session, tenant, isAdmin }) {
       cor,
       cambio,
       foto_principal_url: fotoUrl,
-      destaque_home: destaqueHome,
+      status_destaque: destaqueHome ? 'em_evidencia' : 'normal',
+      data_inicio_destaque: destaqueHome ? new Date().toISOString() : null,
+      data_fim_destaque: destaqueHome ? new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString() : null,
       status: 'Disponível'
     };
 
@@ -386,45 +405,11 @@ export default function Veiculos({ session, tenant, isAdmin }) {
         }]);
       }
 
-      if (marcaObj.name && modeloObj.name) {
-        await supabase.from('catalogo_carros').insert([{ 
-          marca: marcaObj.name, 
-          modelo: modeloObj.name, 
-          versao, 
-          ano: String(anoNumerico), 
-          combustivel 
-        }]);
-      }
-
       alert('Veículo cadastrado com sucesso!');
     }
 
     handleCancelEdit();
     fetchData();
-  };
-
-  // Função exclusiva do Admin para a vitrine principal da Home (campo: destaque)
-  const handleToggleDestaqueAdmin = async (veiculoId, estadoAtual) => {
-    const novoEstado = !estadoAtual;
-
-    if (novoEstado) {
-      const totalDestaquesAdmin = veiculos.filter((v) => v.destaque).length;
-      if (totalDestaquesAdmin >= 4) {
-        alert('Limite atingido! O Administrador pode selecionar no máximo 4 veículos para a vitrine principal da Home.');
-        return;
-      }
-    }
-
-    const { error } = await supabase
-      .from('veiculos')
-      .update({ destaque: novoEstado })
-      .eq('id', veiculoId);
-
-    if (error) {
-      alert('Erro ao atualizar destaque do Admin: ' + error.message);
-    } else {
-      fetchData();
-    }
   };
 
   return (
@@ -647,7 +632,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                   />
                   <div>
                     <span className="text-xs font-bold uppercase tracking-wider text-white block">Destacar na Home Principal</span>
-                    <span className="text-[11px] text-gray-400">Exibe este veículo na vitrine principal da plataforma (Até 6 destaques)</span>
+                    <span className="text-[11px] text-gray-400">Exibe este veículo na vitrine principal da plataforma (Fila rotativa de 2 dias)</span>
                   </div>
                 </label>
               </div>
@@ -719,13 +704,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                     <th className="px-6 py-4">Loja / Revenda</th>
                   )}
 
-                  {/* Destaque do Lojista */}
-                  <th className="px-6 py-4 text-center">Destaque Loja</th>
-
-                  {/* Destaque do Admin (Vitrine Principal da Home) */}
-                  {eAdministrador && (
-                    <th className="px-6 py-4 text-center text-amber-400">Vitrine Home (Admin)</th>
-                  )}
+                  <th className="px-6 py-4 text-center">Vitrine Home (Fila)</th>
 
                   <th className="px-6 py-4 text-center">Ações</th>
                 </tr>
@@ -768,49 +747,27 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                       )}
                     </td>
 
-                    {/* Coluna Loja / Revenda (Apenas para o Admin) */}
                     {eAdministrador && (
                       <td className="px-6 py-4 font-semibold text-blue-400">
                         {veiculo.tenants?.nome || 'Loja Desconhecida'}
                       </td>
                     )}
 
-                    {/* Destaque do Lojista (destaque_home) */}
                     <td className="px-6 py-4 text-center">
                       <button
-                        onClick={() => handleToggleDestaque(veiculo.id, veiculo.destaque_home)}
+                        onClick={() => handleToggleDestaque(veiculo.id, veiculo.status_destaque)}
                         disabled={veiculo.status === 'Vendido'}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow ${
                           veiculo.status === 'Vendido'
                             ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed border border-gray-800'
-                            : veiculo.destaque_home 
+                            : veiculo.status_destaque === 'em_evidencia'
                             ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-900/40' 
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
                         }`}
                       >
-                        {veiculo.destaque_home ? '★ Em Destaque' : '☆ Destacar'}
+                        {veiculo.status_destaque === 'em_evidencia' ? '★ Em Evidência' : '☆ Destacar'}
                       </button>
                     </td>
-
-                    {/* Destaque do Administrador para a Home Principal (campo: destaque - Máximo 4) */}
-                    {eAdministrador && (
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => handleToggleDestaqueAdmin(veiculo.id, veiculo.destaque)}
-                          disabled={veiculo.status === 'Vendido'}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow border ${
-                            veiculo.status === 'Vendido'
-                              ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed border border-gray-800'
-                              : veiculo.destaque
-                              ? 'bg-amber-500/20 border-amber-500/40 text-amber-400 hover:bg-amber-500/30 shadow-amber-900/20'
-                              : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-white'
-                          }`}
-                          title="Definir se este carro aparece nos 4 destaques da Home principal"
-                        >
-                          {veiculo.destaque ? '👑 Home (Ativo)' : '☆ Colocar na Home'}
-                        </button>
-                      </td>
-                    )}
 
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-2">

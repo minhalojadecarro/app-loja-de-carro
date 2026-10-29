@@ -1,19 +1,53 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Link, useNavigate } from 'react-router-dom';
+import HomeLogistas from './HomeLogistas';
 
 export default function Home({ session, tenant, adminLogo, onNavigateRegister, onNavigateVitrine }) {
-  // 1. Declare o navigate e os estados logo no topo da função principal
+  // Verificação de permissão de Administrador
+  const isAdmin = Boolean(
+    tenant && 
+    (
+      String(tenant.subscription_status || '').toLowerCase() === 'admin' || 
+      String(tenant.plano || '').toLowerCase() === 'admin'
+    )
+  );
+
+  // Renderização Condicional: Se houver sessão ativa e o usuário NÃO for Administrador, exibe a Home do Lojista
+  if (session && !isAdmin) {
+    return <HomeLogistas session={session} tenant={tenant} />;
+  }
+
+  // Fluxo normal para Administradores globais ou visitantes deslogados
   const navigate = useNavigate();
   const [veiculosDestaque, setVeiculosDestaque] = useState([]);
   const [loadingDestaques, setLoadingDestaques] = useState(true);
   const [copiado, setCopiado] = useState(false);
+  const [logoRaizAdmin, setLogoRaizAdmin] = useState(adminLogo || '');
 
-  // Função robusta de compartilhamento com fallback triplo
+  // Busca isolada da logo oficial do Administrador (is_admin = true)
+  useEffect(() => {
+    const fetchLogoAdminRaiz = async () => {
+      const { data, error } = await supabase
+        .from('tenants')
+        .select('logo_url')
+        .eq('is_admin', true)
+        .maybeSingle();
+
+      if (!error && data?.logo_url) {
+        setLogoRaizAdmin(data.logo_url);
+        localStorage.setItem('admin_logo_cache', data.logo_url);
+      }
+    };
+
+    if (!adminLogo) {
+      fetchLogoAdminRaiz();
+    }
+  }, [adminLogo]);
+
   const handleShare = async () => {
-    const urlSite = window.location.href; // ou window.location.origin
+    const urlSite = window.location.href;
 
-    // 1. Tenta usar o Share API nativo (Mobile/Android/iOS/Safari)
     if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
       try {
         await navigator.share({
@@ -23,11 +57,10 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
         });
         return;
       } catch (err) {
-        if (err.name === 'AbortError') return; // Usuário apenas fechou a janela de share
+        if (err.name === 'AbortError') return;
       }
     }
 
-    // 2. Tenta a API Moderna do Clipboard (para Desktop/Navegadores modernos)
     if (navigator.clipboard && window.isSecureContext) {
       try {
         await navigator.clipboard.writeText(urlSite);
@@ -35,11 +68,10 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
         setTimeout(() => setCopiado(false), 3000);
         return;
       } catch (err) {
-        console.warn('Erro ao usar navigator.clipboard, usando fallback antigo:', err);
+        console.warn('Erro ao usar navigator.clipboard:', err);
       }
     }
 
-    // 3. Fallback Infalível para Desktop / HTTP / Navegadores antigos (Input Temporário)
     try {
       const textArea = document.createElement('textarea');
       textArea.value = urlSite;
@@ -65,61 +97,58 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
   };
 
   useEffect(() => {
-    const fetchDestaques = async () => {
-      setLoadingDestaques(true);
+  const fetchDestaques = async () => {
+    setLoadingDestaques(true);
 
-      // 1. Buscamos os veículos em destaque marcados pelo Admin
-      const { data: veiculosData, error: veiculosError } = await supabase
-        .from('veiculos')
-        .select('*')
-        .eq('destaque', true)
-        .limit(4);
+    // Pede ao Supabase os veículos em evidência e faz o join direto na tabela tenants
+    const { data, error } = await supabase
+      .from('veiculos')
+      .select(`
+        *,
+        tenants (
+          id,
+          nome_loja,
+          slug
+        )
+      `)
+      .eq('status_destaque', 'em_evidencia')
+      .order('data_inicio_destaque', { ascending: true })
+      .limit(6);
 
-      if (veiculosError) {
-        console.error('Erro ao buscar destaques:', veiculosError);
-        setLoadingDestaques(false);
-        return;
-      }
-
-      if (veiculosData && veiculosData.length > 0) {
-        // 2. Buscamos as lojas correspondentes
-        const tenantIds = veiculosData.map((v) => v.tenant_id).filter(Boolean);
-
-        const { data: tenantsData } = await supabase
-          .from('tenants')
-          .select('*')
-          .in('id', tenantIds);
-
-        // 3. Mapeamos as lojas para cada veículo
-        const veiculosFormatados = veiculosData.map((veiculo) => {
-          const loja = (tenantsData || []).find((t) => t.id === veiculo.tenant_id);
-          return {
-            ...veiculo,
-            tenants: loja || null
-          };
-        });
-
-        setVeiculosDestaque(veiculosFormatados);
-      } else {
-        setVeiculosDestaque([]);
-      }
-
+    if (error) {
+      console.error('Erro ao buscar destaques:', error);
+      setVeiculosDestaque([]);
       setLoadingDestaques(false);
-    };
+      return;
+    }
 
-    fetchDestaques();
-  }, []);
+    // Mapeia os dados extraindo a loja associada
+    const veiculosFormatados = (data || []).map(carro => {
+      // O Supabase retorna a relação como um objeto ou array dependendo da FK
+      const loja = Array.isArray(carro.tenants) ? carro.tenants[0] : carro.tenants;
+
+      return {
+        ...carro,
+        lojaNome: loja?.nome_loja ? String(loja.nome_loja).trim() : 'Revenda Parceira',
+        lojaSlug: loja?.slug ? String(loja.slug).trim() : carro.tenant_id
+      };
+    });
+
+    setVeiculosDestaque(veiculosFormatados);
+    setLoadingDestaques(false);
+  };
+
+  fetchDestaques();
+}, []);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
       {/* Banner Principal (Hero) */}
       <section className="max-w-7xl mx-auto px-6 pt-12 pb-8 flex flex-col items-start text-left space-y-6">
-        {/* BADGE ALINHADA À ESQUERDA */}
         <span className="inline-block px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold uppercase tracking-wider">
           🔥 A plataforma ideal para revendas e autônomos
         </span>
 
-        {/* TÍTULO COM QUEBRA DE LINHA */}
         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight max-w-4xl">
           Sua revenda de carros no <br />
           <span className="text-blue-500 block sm:inline mt-1 sm:mt-0">
@@ -127,12 +156,10 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
           </span>
         </h1>
 
-        {/* SUBTÍTULO / DESCRIÇÃO */}
         <p className="text-gray-200 text-base sm:text-lg leading-relaxed max-w-2xl font-normal">
           Crie sua vitrine virtual profissional em minutos, gerencie o estoque e receba compradores qualificados direto no WhatsApp.
         </p>
 
-        {/* BOTOES DE AÇÃO E COMPARTILHAMENTO */}
         <div className="flex flex-wrap items-center gap-4 pt-4">
           {!session ? (
             <Link
@@ -150,7 +177,6 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
             </Link>
           )}
 
-          {/* BOTÃO NATIVO DE COMPARTILHAMENTO */}
           <button
             onClick={handleShare}
             className="bg-gray-900 hover:bg-gray-800 text-gray-200 font-semibold px-6 py-4 rounded-xl border border-gray-800 shadow-lg transition flex items-center gap-2 transform hover:scale-105 cursor-pointer text-sm sm:text-base"
@@ -171,7 +197,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
             ESTOQUE EM ALTA
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white mt-3 tracking-tight">
-            Destaques de nossas Revendas
+            Destaques de nossas Revendas - Itens ilustrativo "fase de testes"
           </h2>
         </div>
 
@@ -186,11 +212,8 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {veiculosDestaque.map((carro) => {
-              const nomeLoja = 
-                carro.tenants?.nome_loja || 
-                carro.tenants?.nome || 
-                carro.tenants?.name || 
-                'Loja Parceira';
+              const nomeLoja = carro.lojaNome;
+              const slugLoja = carro.lojaSlug;
 
               return (
                 <div 
@@ -198,7 +221,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
                   className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl hover:border-gray-700 transition group flex flex-col justify-between"
                 >
                   <div>
-                    {/* Foto do Veículo com Badge da Loja */}
+                    {/* Foto do Veículo com Badge da Loja correta */}
                     <div className="h-56 w-full bg-gray-950 relative overflow-hidden">
                       {carro.foto_principal_url ? (
                         <img 
@@ -211,7 +234,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
                           Sem Imagem
                         </div>
                       )}
-                      <span className="absolute top-4 left-4 bg-blue-600 text-white text-[11px] font-extrabold uppercase tracking-wider px-3 py-1 rounded-md shadow-lg">
+                      <span className="absolute top-4 left-4 bg-blue-600 text-white text-[11px] font-extrabold uppercase tracking-wider px-3 py-1 rounded-md shadow-lg truncate max-w-[200px]" title={nomeLoja}>
                         {nomeLoja}
                       </span>
                     </div>
@@ -243,13 +266,11 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
                   <div className="p-6 pt-0">
                     <button
                       onClick={() => {
-                        const slugLoja = carro.tenants?.slug || carro.tenants?.nome_loja || carro.tenants?.nome;
-                        if (slugLoja) {
-                          const slugFormatado = String(slugLoja).toLowerCase().replace(/\s+/g, '-');
-                          navigate(`/${slugFormatado}`);
-                        } else if (typeof onNavigateVitrine === 'function') {
-                          onNavigateVitrine(carro.tenant_id, carro.tenants);
-                        }
+                        // Pega o slug diretamente da relação do tenant ou usa o slug amigável padrão baseado no nome/id
+                        const slugLoja = carro.tenants?.slug || (carro.tenant_id === 'd1c8cb8f-dd65-45d4-8ab9-1621645d2501' ? 'mariaregina' : 'carro-barato');
+                        
+                        console.log("Navegando para o slug exato:", slugLoja);
+                        navigate(`/${slugLoja}`);
                       }}
                       className="w-full bg-gray-950 hover:bg-gray-800 text-blue-400 hover:text-blue-300 border border-gray-800 text-xs font-bold py-3 rounded-xl transition flex items-center justify-center shadow-inner cursor-pointer"
                     >
@@ -262,7 +283,6 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
           </div>
         )}
 
-        {/* Botão Criar Minha Loja Agora */}
         {!session && (
           <div className="flex justify-center pt-12 pb-6">
             <Link
@@ -333,7 +353,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
         </div>
       </section>
 
-      {/* SEÇÃO: COMO FUNCIONA NA PRÁTICA? */}
+      {/* Seção Como Funciona */}
       <section className="max-w-7xl mx-auto px-6 py-20 border-t border-gray-900 w-full">
         <div className="bg-gray-900/30 border border-gray-800/80 rounded-3xl p-8 sm:p-12 relative overflow-hidden">
           <div className="max-w-xl mb-12">
@@ -344,7 +364,6 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Passo 01 */}
             <div className="space-y-3">
               <span className="inline-block bg-white text-blue-600 text-2xl font-black px-4 py-1.5 rounded-xl shadow-md font-mono mb-3">
                 1º Passo
@@ -355,7 +374,6 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
               </p>
             </div>
 
-            {/* Passo 02 */}
             <div className="space-y-3">
               <span className="inline-block bg-white text-blue-600 text-2xl font-black px-4 py-1.5 rounded-xl border border-blue-200 shadow-lg font-mono mb-3">
                 2º Passo
@@ -366,7 +384,6 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
               </p>
             </div>
 
-            {/* Passo 03 */}
             <div className="space-y-3">
               <span className="inline-block bg-white text-blue-600 text-2xl font-black px-4 py-1.5 rounded-xl shadow-md font-mono mb-3">
                 3º Passo
@@ -380,7 +397,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
         </div>
       </section>
 
-      {/* SEÇÃO: CHAMADA PARA AÇÃO (CTA FINAL) */}
+      {/* CTA Final */}
       <section className="max-w-7xl mx-auto px-6 py-20 border-t border-gray-900 text-center w-full">
         <div className="max-w-3xl mx-auto bg-gradient-to-b from-gray-900 to-gray-950 border border-gray-800 rounded-3xl p-10 sm:p-16 shadow-2xl space-y-6">
           <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight">

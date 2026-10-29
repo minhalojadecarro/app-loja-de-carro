@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { AppRoutes } from './routes/AppRoutes';
-
 
 function AppContent() {
   const [session, setSession] = useState(null);
@@ -11,44 +10,59 @@ function AppContent() {
   const [userProfile, setUserProfile] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminLogo, setAdminLogo] = useState(null);
+  const [adminNome, setAdminNome] = useState('Minha Loja de Carro');
   const [selectedStore, setSelectedStore] = useState(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
-  const navigate = useNavigate();
-  // ajuste de rota).
+  // Função para atualizar o tenant na memória global e no cache na hora
+  const handleTenantUpdated = (novosDados) => {
+    setTenantData(prev => ({ ...prev, ...novosDados }));
+    
+    if (novosDados.logo_url && !isAdmin) {
+      localStorage.setItem('tenant_logo_cache', novosDados.logo_url);
+    }
+    if (novosDados.nome_loja && !isAdmin) {
+      localStorage.setItem('tenant_nome_cache', novosDados.nome_loja);
+    }
+  };
 
-  // Handler para navegar até a página de registro/login
+  const navigate = useNavigate();
+
   const handleNavigateRegister = () => {
     navigate('/login');
   };
 
   useEffect(() => {
-    const fetchAdminLogo = async () => {
-      const { data: adminData } = await supabase
+    // BUSCA EXCLUSIVA DO ADMINISTRADOR RAIZ (is_admin = true)
+    const fetchAdminMaster = async () => {
+      const { data: adminData, error } = await supabase
         .from('tenants')
-        .select('logo_url')
-        .or('subscription_status.ilike.admin,plano.ilike.admin')
-        .not('logo_url', 'is', null)
+        .select('logo_url, nome_loja')
+        .eq('is_admin', true)
         .maybeSingle();
 
-      if (adminData && adminData.logo_url) {
-        setAdminLogo(adminData.logo_url);
-        return;
-      }
-
-      const { data: firstTenantData } = await supabase
-        .from('tenants')
-        .select('logo_url')
-        .not('logo_url', 'is', null)
-        .limit(1)
-        .maybeSingle();
-
-      if (firstTenantData && firstTenantData.logo_url) {
-        setAdminLogo(firstTenantData.logo_url);
+      if (!error && adminData) {
+        if (adminData.logo_url) setAdminLogo(adminData.logo_url);
+        if (adminData.nome_loja) setAdminNome(adminData.nome_loja);
       }
     };
 
-    fetchAdminLogo();
+    fetchAdminMaster();
+
+    const handleInstantUpdate = () => {
+      if (!isAdmin) {
+        const novaLogo = localStorage.getItem('tenant_logo_cache');
+        const novoNome = localStorage.getItem('tenant_nome_cache');
+        
+        setTenantData(prev => ({
+          ...prev,
+          logo_url: novaLogo || prev?.logo_url,
+          nome_loja: novoNome || prev?.nome_loja
+        }));
+      }
+    };
+
+    window.addEventListener('tenantUpdatedInstant', handleInstantUpdate);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -76,27 +90,23 @@ function AppContent() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // CONSULTA REFORÇADA: Busca o perfil do usuário em profiles e o tenant em tenants
   const checkUserRoleAndTenant = async (currentSession) => {
     setLoadingSession(true);
     const userId = currentSession.user.id;
     const userEmail = currentSession.user.email;
 
     try {
-      // 1. Consulta a tabela central de perfis (profiles)
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('is_admin, foto_perfil_url, logo_url, nome')
+        .select('is_admin, foto_perfil_url, nome')
         .eq('id', userId)
         .maybeSingle();
 
       setUserProfile(profileData);
 
-      // Valida se é admin pelo perfil em profiles ou e-mail master
       const userIsAdmin = profileData?.is_admin === true || userEmail === 'minhalojadecarro@gmail.com';
       setIsAdmin(userIsAdmin);
 
-      // 2. Busca os dados da loja/tenant associada ao usuário em tenants
       const { data: tenant, error } = await supabase
         .from('tenants')
         .select('*')
@@ -122,22 +132,29 @@ function AppContent() {
     setTenantData(null);
     setUserProfile(null);
     setIsAdmin(false);
+    localStorage.removeItem('tenant_logo_cache');
+    localStorage.removeItem('tenant_nome_cache');
     navigate('/');
   };
 
   if (loadingSession) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">
-        <p className="text-lg animate-pulse">A carregar sistema...</p>
+        <p className="text-lg animate-pulse">Carregando sistema...</p>
       </div>
     );
   }
 
-  // DEFINIÇÃO PRIORITÁRIA DE EXIBIÇÃO DE IMAGENS:
-  // Pega primeiro de profiles e, se não houver, usa os fallbacks do tenantData ou adminLogo
-  const fotoPerfilUser = userProfile?.foto_perfil_url || tenantData?.foto_perfil_url || null;
-  const logoParaExibir = userProfile?.logo_url || tenantData?.logo_url || adminLogo;
-  const nomeExibicao = userProfile?.nome || tenantData?.nome_loja || tenantData?.nome || 'Minha Loja de Carro';
+  // DEFINIÇÃO BLINDADA: Garante prioridade ao adminLogo quando deslogado ou admin, e cache/tenant quando lojista
+  const logoParaExibir = (!session || isAdmin) 
+    ? (adminLogo || localStorage.getItem('tenant_logo_cache')) 
+    : (tenantData?.logo_url || adminLogo || localStorage.getItem('tenant_logo_cache'));
+
+  const nomeExibicao = (!session || isAdmin) 
+    ? adminNome 
+    : (tenantData?.nome_loja || adminNome);
+
+  const fotoPerfilUser = userProfile?.foto_perfil_url || null;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col font-sans">
@@ -151,20 +168,20 @@ function AppContent() {
             className="flex items-center gap-2 sm:gap-3 cursor-pointer" 
           >
             <div className="h-9 sm:h-12 w-auto min-w-[36px] flex items-center">
-              {logoParaExibir ? (
-                <img 
-                  src={logoParaExibir} 
-                  alt={nomeExibicao} 
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                  className="h-9 sm:h-12 w-auto max-w-[120px] sm:max-w-[150px] object-contain rounded-lg border border-gray-800 bg-gray-950 p-1"
-                />
-              ) : (
-                <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-base shadow-md">
-                  🚗
-                </div>
-              )}
+              <img 
+                src={logoParaExibir || "https://via.placeholder.com/150"} 
+                alt={nomeExibicao} 
+                className="h-9 sm:h-12 w-auto max-w-[120px] sm:max-w-[150px] object-contain rounded-lg border border-gray-800 bg-gray-950 p-1"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) {
+                    e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }
+                }}
+              />
+              <div className="w-9 h-9 bg-blue-600 rounded-xl items-center justify-center text-white font-bold text-base shadow-md" style={{ display: 'none' }}>
+                🚗
+              </div>
             </div>
 
             <span className="text-xs sm:text-xl font-bold tracking-tight text-white whitespace-nowrap">
@@ -174,7 +191,6 @@ function AppContent() {
 
           {/* MENUS DE NAVEGAÇÃO */}
           <nav className="hidden md:flex items-center gap-4">
-            {/* 1. HOME */}
             <Link
               to="/"
               className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition"
@@ -182,14 +198,13 @@ function AppContent() {
               Home
             </Link>
 
-            {/* 2. VISITANTES DESLOGADOS */}
             {!session && (
               <>
                 <Link
-                  to="/compradores"
+                  to="/sobre"
                   className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition"
                 >
-                  Vitrine / Comprar
+                  Sobre
                 </Link>
 
                 <Link
@@ -201,7 +216,6 @@ function AppContent() {
               </>
             )}
 
-            {/* 3. MINHA VITRINE: Exibida estritamente para Lojistas (!isAdmin) */}
             {session && !isAdmin && tenantData && (
               <Link
                 to={`/${tenantData.slug || String(tenantData.nome_loja || '').toLowerCase().trim().replace(/\s+/g, '-')}`}
@@ -216,7 +230,6 @@ function AppContent() {
               </Link>
             )}
 
-            {/* 4. LINKS DE GESTÃO */}
             {session && (
               <>
                 <Link
@@ -261,7 +274,6 @@ function AppContent() {
                   </div>
                 </button>
 
-                {/* DROPDOWN DO PERFIL / ADMIN */}
                 {profileMenuOpen && (
                   <div 
                     onMouseLeave={() => setProfileMenuOpen(false)}
@@ -301,13 +313,15 @@ function AppContent() {
                       <span>💳</span> Ver Planos e Precos
                     </Link>
 
-                    <Link
-                      to="/assinaturas"
-                      onClick={() => setProfileMenuOpen(false)}
-                      className="w-full text-left px-4 py-2.5 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
-                    >
-                      <span>💳</span> Gestao de Assinaturas
-                    </Link>
+                    {isAdmin && (
+                      <Link
+                        to="/assinaturas"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="w-full text-left px-4 py-2.5 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
+                      >
+                        <span>💳</span> Gestao de Assinaturas
+                      </Link>
+                    )}
 
                     {!isAdmin && Boolean(tenantData?.slug) && (
                       <Link
@@ -359,6 +373,7 @@ function AppContent() {
           isAdmin={isAdmin} 
           selectedStore={selectedStore} 
           onNavigateRegister={handleNavigateRegister}
+          onTenantUpdated={handleTenantUpdated}
         />
       </main>
 

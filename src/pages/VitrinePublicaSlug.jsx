@@ -14,28 +14,50 @@ export default function VitrinePublicaSlug() {
   useEffect(() => {
     const fetchLojaEValores = async () => {
       setLoading(true);
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenants')
-        .select('*')
-        .ilike('slug', slug)
-        .maybeSingle();
+      
+      // Verifica se o parâmetro na URL é um UUID válido
+      const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(slug);
 
-      if (tenantError || !tenantData) {
+      let tenantData = null;
+
+      if (isUuid) {
+        // Se a URL recebeu um ID/UUID, busca diretamente pela coluna 'id' do Supabase
+        const { data, error } = await supabase
+          .from('tenants')
+          .select('*')
+          .eq('id', slug)
+          .maybeSingle();
+        
+        if (!error) tenantData = data;
+      } else {
+        // Se recebeu um texto, busca pela coluna 'slug'
+        const { data, error } = await supabase
+          .from('tenants')
+          .select('*')
+          .ilike('slug', slug)
+          .maybeSingle();
+
+        if (!error) tenantData = data;
+      }
+
+      // Fallback por segurança caso venha nome formatado
+      if (!tenantData && !isUuid) {
         const { data: tenantByName } = await supabase
           .from('tenants')
           .select('*')
-          .ilike('nome', slug.replace(/-/g, ' '))
+          .ilike('nome_loja', slug.replace(/-/g, ' '))
           .maybeSingle();
 
         if (tenantByName) {
-          setTenant(tenantByName);
-          fetchVeiculos(tenantByName.id);
-        } else {
-          setLoading(false);
+          tenantData = tenantByName;
         }
-      } else {
+      }
+
+      if (tenantData) {
         setTenant(tenantData);
         fetchVeiculos(tenantData.id);
+      } else {
+        setLoading(false);
       }
     };
 
@@ -44,7 +66,6 @@ export default function VitrinePublicaSlug() {
         .from('veiculos')
         .select('*')
         .eq('tenant_id', tenantId)
-        .neq('status', 'Vendido')
         .order('destaque_home', { ascending: false })
         .order('created_at', { ascending: false });
 
