@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
 export default function Lojas() {
@@ -13,7 +13,7 @@ export default function Lojas() {
   const [whatsapp, setWhatsapp] = useState('');
   const [plano, setPlano] = useState('trial');
 
-  const fetchLojas = async () => {
+  const fetchLojas = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('tenants')
@@ -26,11 +26,14 @@ export default function Lojas() {
       setLojas(data || []);
     }
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchLojas();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchLojas();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchLojas]);
 
   const generateSlug = (text) => {
     return text

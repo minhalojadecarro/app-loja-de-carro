@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async'; // <--- Importando o Helmet
 import { supabase } from './supabaseClient';
 import { AppRoutes } from './routes/AppRoutes';
 
@@ -11,8 +12,61 @@ function AppContent() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminLogo, setAdminLogo] = useState(null);
   const [adminNome, setAdminNome] = useState('Minha Loja de Carro');
+  const [adminCapaOG, setAdminCapaOG] = useState('https://motyshnlombyzidqhjgk.supabase.co/storage/v1/object/public/veiculos-fotos/1793455032740_14zpk9g933q.jpg'); // <--- Estado para a capa dinâmica do Admin
   const [selectedStore, setSelectedStore] = useState(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleNavigateRegister = () => {
+    navigate('/login');
+  };
+
+  const currentPathMatchesTenant = useCallback((slug) => {
+    return location.pathname === `/${slug}`;
+  }, [location.pathname]);
+
+  // Função para verificar permissões e tenant, memorizada com useCallback
+  const checkUserRoleAndTenant = useCallback(async (currentSession) => {
+    setLoadingSession(true);
+    const userId = currentSession.user.id;
+    const userEmail = currentSession.user.email;
+
+    try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('is_admin, foto_perfil_url, nome')
+        .eq('id', userId)
+        .maybeSingle();
+
+      setUserProfile(profileData);
+
+      const userIsAdmin = profileData?.is_admin === true || userEmail === 'minhalojadecarro@gmail.com';
+      setIsAdmin(userIsAdmin);
+
+      const { data: tenant, error } = await supabase
+        .from('tenants')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!error && tenant) {
+        setTenantData(tenant);
+        setSelectedStore(tenant);
+        // Se for lojista logado e ele tiver capa própria configurada, podemos opcionalmente usá-la na home dele
+        if (tenant.capa_vitrine_url && currentPathMatchesTenant(tenant.slug)) {
+          setAdminCapaOG(tenant.capa_vitrine_url);
+        }
+      } else {
+        setTenantData(null);
+      }
+    } catch (err) {
+      console.error('Erro ao verificar permissões do usuário:', err);
+    } finally {
+      setLoadingSession(false);
+    }
+  }, [currentPathMatchesTenant]);
 
   // Função para atualizar o tenant na memória global e no cache na hora
   const handleTenantUpdated = (novosDados) => {
@@ -24,26 +78,25 @@ function AppContent() {
     if (novosDados.nome_loja && !isAdmin) {
       localStorage.setItem('tenant_nome_cache', novosDados.nome_loja);
     }
-  };
-
-  const navigate = useNavigate();
-
-  const handleNavigateRegister = () => {
-    navigate('/login');
+    // Se o admin atualizar a capa da vitrine principal
+    if (novosDados.capa_vitrine_url && (isAdmin || !session)) {
+      setAdminCapaOG(novosDados.capa_vitrine_url);
+    }
   };
 
   useEffect(() => {
-    // BUSCA EXCLUSIVA DO ADMINISTRADOR RAIZ (is_admin = true)
+    // BUSCA EXCLUSIVA DO ADMINISTRADOR RAIZ (is_admin = true) - Incluindo capa de vitrine/OG
     const fetchAdminMaster = async () => {
       const { data: adminData, error } = await supabase
         .from('tenants')
-        .select('logo_url, nome_loja')
+        .select('logo_url, nome_loja, capa_vitrine_url')
         .eq('is_admin', true)
         .maybeSingle();
 
       if (!error && adminData) {
         if (adminData.logo_url) setAdminLogo(adminData.logo_url);
         if (adminData.nome_loja) setAdminNome(adminData.nome_loja);
+        if (adminData.capa_vitrine_url) setAdminCapaOG(adminData.capa_vitrine_url);
       }
     };
 
@@ -87,44 +140,11 @@ function AppContent() {
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const checkUserRoleAndTenant = async (currentSession) => {
-    setLoadingSession(true);
-    const userId = currentSession.user.id;
-    const userEmail = currentSession.user.email;
-
-    try {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('is_admin, foto_perfil_url, nome')
-        .eq('id', userId)
-        .maybeSingle();
-
-      setUserProfile(profileData);
-
-      const userIsAdmin = profileData?.is_admin === true || userEmail === 'minhalojadecarro@gmail.com';
-      setIsAdmin(userIsAdmin);
-
-      const { data: tenant, error } = await supabase
-        .from('tenants')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (!error && tenant) {
-        setTenantData(tenant);
-        setSelectedStore(tenant);
-      } else {
-        setTenantData(null);
-      }
-    } catch (err) {
-      console.error('Erro ao verificar permissões do usuário:', err);
-    } finally {
-      setLoadingSession(false);
-    }
-  };
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('tenantUpdatedInstant', handleInstantUpdate);
+    };
+  }, [checkUserRoleAndTenant, isAdmin]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -145,7 +165,7 @@ function AppContent() {
     );
   }
 
-  // DEFINIÇÃO BLINDADA: Garante prioridade ao adminLogo quando deslogado ou admin, e cache/tenant quando lojista
+  // DEFINIÇÃO BLINDADA
   const logoParaExibir = (!session || isAdmin) 
     ? (adminLogo || localStorage.getItem('tenant_logo_cache')) 
     : (tenantData?.logo_url || adminLogo || localStorage.getItem('tenant_logo_cache'));
@@ -154,10 +174,35 @@ function AppContent() {
     ? adminNome 
     : (tenantData?.nome_loja || adminNome);
 
+  // Definição dinâmica da imagem de capa OG para o Helmet na raiz/home
+  const imagemCapaOGAtiva = (!session || isAdmin)
+    ? adminCapaOG
+    : (tenantData?.capa_vitrine_url || adminCapaOG);
+
   const fotoPerfilUser = userProfile?.foto_perfil_url || null;
+
+  const currentPath = location.pathname;
+  const homeTargetSlug = session && !isAdmin && tenantData?.slug ? `/${tenantData.slug}` : "/";
+  const isHomeActive = currentPath === homeTargetSlug || (session && !isAdmin && tenantData?.slug && currentPath === `/${tenantData.slug}`);
+  const isEstoqueActive = currentPath === '/veiculos' || currentPath === '/estoque';
+  const isVitrinesActive = currentPath === '/vitrines';
+  const isRelatoriosActive = currentPath === '/relatorios';
+  const isSobreActive = currentPath === '/sobre';
+  const isPlanosActive = currentPath === '/planos';
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col font-sans">
+      {/* INJEÇÃO DINÂMICA DE METADADOS OPEN GRAPH / SEO */}
+      <Helmet>
+        <title>{nomeExibicao} | Encontre seu Veículo ou Moto</title>
+        <meta property="og:title" content={`${nomeExibicao} | Encontre seu Veículo ou Moto`} />
+        <meta property="og:description" content="Confira o estoque atualizado com preços da Tabela FIPE e as melhores ofertas de carros e motos." />
+        <meta property="og:image" content={imagemCapaOGAtiva} />
+        <meta name="twitter:title" content={`${nomeExibicao} | Encontre seu Veículo ou Moto`} />
+        <meta name="twitter:description" content="Confira o estoque atualizado com preços da Tabela FIPE e as melhores ofertas." />
+        <meta name="twitter:image" content={imagemCapaOGAtiva} />
+      </Helmet>
+
       {/* Navbar Superior Fixa */}
       <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-50 shadow-2xl">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -189,27 +234,54 @@ function AppContent() {
             </span>
           </Link>
 
-          {/* MENUS DE NAVEGAÇÃO */}
+          {/* MENUS DE NAVEGAÇÃO (DESKTOP) */}
           <nav className="hidden md:flex items-center gap-4">
-            <Link
-              to="/"
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition"
-            >
-              Home
-            </Link>
+            {/* Se o usuário estiver logado e NÃO for admin, o botão Home vira "Painel" */}
+            {session && !isAdmin ? (
+              <Link
+                to="/painel-lojista"
+                className="px-4 py-2 rounded-xl text-sm font-semibold transition text-gray-400 hover:text-white hover:bg-gray-800"
+              >
+                Painel
+              </Link>
+            ) : (
+              /* Para visitantes ou para o Administrador, o botão Home aponta para a raiz pública */
+              <Link
+                to={isAdmin ? "/home-publica" : "/"}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                  isHomeActive ? 'text-white bg-gray-800 shadow' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                Home
+              </Link>
+            )}
+
+            {/* Se for Administrador, adicionamos um botão rápido "Painel" logo no menu principal */}
+            {session && isAdmin && (
+              <Link
+                to="/painel-lojista"
+                className="px-4 py-2 rounded-xl text-sm font-semibold transition text-gray-400 hover:text-white hover:bg-gray-800"
+              >
+                Painel
+              </Link>
+            )}
 
             {!session && (
               <>
                 <Link
                   to="/sobre"
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition"
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                    isSobreActive ? 'text-white bg-gray-800 shadow' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
                 >
                   Sobre
                 </Link>
 
                 <Link
                   to="/planos"
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition"
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                    isPlanosActive ? 'text-white bg-gray-800 shadow' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
                 >
                   Planos
                 </Link>
@@ -218,15 +290,14 @@ function AppContent() {
 
             {session && !isAdmin && tenantData && (
               <Link
-                to={`/${tenantData.slug || String(tenantData.nome_loja || '').toLowerCase().trim().replace(/\s+/g, '-')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 rounded-xl text-sm font-semibold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 transition flex items-center gap-1.5"
+                to={`/${tenantData.slug}`}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                  currentPath === `/${tenantData.slug}` 
+                    ? 'text-white bg-gray-800 shadow' 
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
               >
-                <span>Minha Vitrine</span>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
+                Minha Vitrine
               </Link>
             )}
 
@@ -234,21 +305,29 @@ function AppContent() {
               <>
                 <Link
                   to="/veiculos"
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition"
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                    isEstoqueActive ? 'text-white bg-gray-800 shadow' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
                 >
                   Estoque
                 </Link>
 
-                <Link
-                  to="/vitrines"
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition"
-                >
-                  Vitrines
-                </Link>
+                {isAdmin && (
+                  <Link
+                    to="/vitrines"
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                      isVitrinesActive ? 'text-white bg-gray-800 shadow' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    Vitrines
+                  </Link>
+                )}
 
                 <Link
                   to="/relatorios"
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition"
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                    isRelatoriosActive ? 'text-white bg-gray-800 shadow' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
                 >
                   Relatórios / Vendas
                 </Link>
@@ -256,7 +335,7 @@ function AppContent() {
             )}
           </nav>
 
-          {/* ÁREA DIREITA: AVATAR COM MENU UNIFICADO */}
+          {/* ÁREA DIREITA: AVATAR COM MENU SUSPENSO */}
           <div className="flex items-center gap-3">
             {session ? (
               <div className="relative">
@@ -287,11 +366,75 @@ function AppContent() {
                       </span>
                     </div>
 
+                    <div className="px-3 py-1 mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                      Menu de Navegação
+                    </div>
+
+                    <Link
+                      to={isAdmin ? "/home-publica" : homeTargetSlug}
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
+                    >
+                      <span>🏠</span> Home
+                    </Link>
+
+                    {session && !isAdmin && tenantData && (
+                      <Link
+                        to="/painel-lojista"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="w-full text-left px-4 py-2 text-xs font-medium text-sky-400 hover:bg-slate-800 hover:text-sky-300 transition flex items-center gap-2.5"
+                      >
+                        <span>📊</span> Painel de Gestão
+                      </Link>
+                    )}
+
+                    {session && !isAdmin && tenantData && (
+                      <Link
+                        to={`/${tenantData.slug}`}
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="w-full text-left px-4 py-2 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
+                      >
+                        <span>🔗</span> Minha Vitrine Pública
+                      </Link>
+                    )}
+
+                    <Link
+                      to="/veiculos"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
+                    >
+                      <span>🚗</span> Estoque de Veículos/Motos
+                    </Link>
+
+                    {isAdmin && (
+                      <Link
+                        to="/vitrines"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="w-full text-left px-4 py-2 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
+                      >
+                        <span>🌟</span> Vitrines
+                      </Link>
+                    )}
+
+                    <Link
+                      to="/relatorios"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
+                    >
+                      <span>📊</span> Relatórios / Vendas
+                    </Link>
+
+                    <div className="border-t border-slate-800 my-2"></div>
+
+                    <div className="px-3 py-1 mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                      Configurações e Conta
+                    </div>
+
                     {isAdmin && (
                       <Link
                         to="/lojas"
                         onClick={() => setProfileMenuOpen(false)}
-                        className="w-full text-left px-4 py-2.5 text-xs font-semibold text-amber-400 hover:bg-slate-800 transition flex items-center gap-2.5"
+                        className="w-full text-left px-4 py-2 text-xs font-semibold text-amber-400 hover:bg-slate-800 transition flex items-center gap-2.5"
                       >
                         <span>🏢</span> Gestao de Lojas (Admin)
                       </Link>
@@ -300,7 +443,7 @@ function AppContent() {
                     <Link
                       to="/configuracoes"
                       onClick={() => setProfileMenuOpen(false)}
-                      className="w-full text-left px-4 py-2.5 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
                     >
                       <span>⚙️</span> Configuracoes da Conta
                     </Link>
@@ -308,28 +451,28 @@ function AppContent() {
                     <Link
                       to="/planos"
                       onClick={() => setProfileMenuOpen(false)}
-                      className="w-full text-left px-4 py-2.5 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
                     >
-                      <span>💳</span> Ver Planos e Precos
+                      <span>💳</span> Planos e Preços
                     </Link>
 
                     {isAdmin && (
                       <Link
                         to="/assinaturas"
                         onClick={() => setProfileMenuOpen(false)}
-                        className="w-full text-left px-4 py-2.5 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
+                        className="w-full text-left px-4 py-2 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
                       >
                         <span>💳</span> Gestao de Assinaturas
                       </Link>
                     )}
 
-                    {!isAdmin && Boolean(tenantData?.slug) && (
+                    {isAdmin && (
                       <Link
-                        to={`/${tenantData.slug}`}
+                        to="/dashboard-financeiro"
                         onClick={() => setProfileMenuOpen(false)}
-                        className="w-full text-left px-4 py-2.5 text-xs font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2.5"
+                        className="w-full text-left px-4 py-2 text-xs font-bold text-emerald-400 hover:bg-slate-800 transition flex items-center gap-2.5"
                       >
-                        <span>🏠</span> Minha Vitrine Publica
+                        <span>📈</span> Dashboard Financeiro (SaaS)
                       </Link>
                     )}
 

@@ -1,9 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Link, useNavigate } from 'react-router-dom';
 import HomeLogistas from './HomeLogistas';
 
-export default function Home({ session, tenant, adminLogo, onNavigateRegister, onNavigateVitrine }) {
+export default function Home({ session, tenant, adminLogo }) {
+  // 1. TODOS OS HOOKS DEVEM FICAR NO TOPO DO COMPONENTE (Sem retornos antes deles)
+  const navigate = useNavigate();
+  const [veiculosDestaque, setVeiculosDestaque] = useState([]);
+  const [loadingDestaques, setLoadingDestaques] = useState(true);
+  const [copiado, setCopiado] = useState(false);
+  const [, setLogoRaizAdmin] = useState(adminLogo || '');
+
   // Verificação de permissão de Administrador
   const isAdmin = Boolean(
     tenant && 
@@ -12,18 +19,6 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
       String(tenant.plano || '').toLowerCase() === 'admin'
     )
   );
-
-  // Renderização Condicional: Se houver sessão ativa e o usuário NÃO for Administrador, exibe a Home do Lojista
-  if (session && !isAdmin) {
-    return <HomeLogistas session={session} tenant={tenant} />;
-  }
-
-  // Fluxo normal para Administradores globais ou visitantes deslogados
-  const navigate = useNavigate();
-  const [veiculosDestaque, setVeiculosDestaque] = useState([]);
-  const [loadingDestaques, setLoadingDestaques] = useState(true);
-  const [copiado, setCopiado] = useState(false);
-  const [logoRaizAdmin, setLogoRaizAdmin] = useState(adminLogo || '');
 
   // Busca isolada da logo oficial do Administrador (is_admin = true)
   useEffect(() => {
@@ -91,113 +86,98 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
       } else {
         alert(`Copie o link da loja: ${urlSite}`);
       }
-    } catch (err) {
+    } catch {
       alert(`Copie o link da loja: ${urlSite}`);
     }
   };
 
   useEffect(() => {
-  const fetchDestaques = async () => {
-    setLoadingDestaques(true);
+    const fetchDestaques = async () => {
+      setLoadingDestaques(true);
 
-    // Pede ao Supabase os veículos em evidência e faz o join direto na tabela tenants
-    const { data, error } = await supabase
-      .from('veiculos')
-      .select(`
-        *,
-        tenants (
-          id,
-          nome_loja,
-          slug
-        )
-      `)
-      .eq('status_destaque', 'em_evidencia')
-      .order('data_inicio_destaque', { ascending: true })
-      .limit(6);
+      const { data, error } = await supabase
+        .from('veiculos')
+        .select(`
+          *,
+          tenants (
+            id,
+            nome_loja,
+            slug
+          )
+        `)
+        .eq('status_destaque', 'em_evidencia')
+        .neq('status', 'Vendido')
+        .order('data_inicio_destaque', { ascending: true })
+        .limit(6);
 
-    if (error) {
-      console.error('Erro ao buscar destaques:', error);
-      setVeiculosDestaque([]);
+      if (error) {
+        console.error('Erro ao buscar destaques:', error);
+        setVeiculosDestaque([]);
+        setLoadingDestaques(false);
+        return;
+      }
+
+      const veiculosFormatados = (data || []).map(carro => {
+        const loja = Array.isArray(carro.tenants) ? carro.tenants[0] : carro.tenants;
+
+        return {
+          ...carro,
+          lojaNome: loja?.nome_loja ? String(loja.nome_loja).trim() : 'Revenda Parceira',
+          lojaSlug: loja?.slug ? String(loja.slug).trim() : carro.tenant_id
+        };
+      });
+
+      setVeiculosDestaque(veiculosFormatados);
       setLoadingDestaques(false);
-      return;
-    }
+    };
 
-    // Mapeia os dados extraindo a loja associada
-    const veiculosFormatados = (data || []).map(carro => {
-      // O Supabase retorna a relação como um objeto ou array dependendo da FK
-      const loja = Array.isArray(carro.tenants) ? carro.tenants[0] : carro.tenants;
+    fetchDestaques();
+  }, []);
 
-      return {
-        ...carro,
-        lojaNome: loja?.nome_loja ? String(loja.nome_loja).trim() : 'Revenda Parceira',
-        lojaSlug: loja?.slug ? String(loja.slug).trim() : carro.tenant_id
-      };
-    });
-
-    setVeiculosDestaque(veiculosFormatados);
-    setLoadingDestaques(false);
-  };
-
-  fetchDestaques();
-}, []);
+  // 2. RENDERIZAÇÃO CONDICIONAL APÓS TODOS OS HOOKS
+  if (session && !isAdmin) {
+    return <HomeLogistas session={session} tenant={tenant} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
       {/* Banner Principal (Hero) */}
       <section className="max-w-7xl mx-auto px-6 pt-12 pb-8 flex flex-col items-start text-left space-y-6">
         <span className="inline-block px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold uppercase tracking-wider">
-          🔥 A plataforma ideal para revendas e autônomos
+          🔥 Gestão completa, venda mais sem complicação!
         </span>
 
         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight max-w-4xl">
-          Sua revenda de carros no <br />
+          Sua revenda de VEÍCULOS no <br />
           <span className="text-blue-500 block sm:inline mt-1 sm:mt-0">
             piloto automático.
           </span>
         </h1>
 
         <p className="text-gray-200 text-base sm:text-lg leading-relaxed max-w-2xl font-normal">
-          Crie sua vitrine virtual profissional em minutos, gerencie o estoque e receba compradores qualificados direto no WhatsApp.
+          Crie sua vitrine virtual profissional em minutos, gerencie o estoque, vendas e receba compradores qualificados direto no seu WhatsApp.
         </p>
 
         <div className="flex flex-wrap items-center gap-4 pt-4">
-          {!session ? (
-            <Link
-              to="/login"
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-blue-900/50 transition transform hover:scale-105 inline-block text-center"
-            >
-              Criar Minha Loja Agora →
-            </Link>
-          ) : (
-            <Link
-              to="/estoque"
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-blue-900/50 transition transform hover:scale-105 inline-block text-center"
-            >
-              Acessar Meu Painel →
-            </Link>
-          )}
-
-          <button
-            onClick={handleShare}
-            className="bg-gray-900 hover:bg-gray-800 text-gray-200 font-semibold px-6 py-4 rounded-xl border border-gray-800 shadow-lg transition flex items-center gap-2 transform hover:scale-105 cursor-pointer text-sm sm:text-base"
-            title="Compartilhar plataforma"
+        {session && (
+          <Link
+            to="/estoque"
+            className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-blue-900/50 transition transform hover:scale-105 inline-block text-center"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684" />
-            </svg>
-            {copiado ? 'Link Copiado! 🚀' : 'Compartilhar Site'}
-          </button>
-        </div>
+            Acessar Meu Painel →
+          </Link>
+        )}
+      </div>
       </section>
 
       {/* SEÇÃO DE VEÍCULOS EM DESTAQUE */}
       <section className="max-w-7xl mx-auto px-6 py-8 w-full">
         <div className="text-center mb-10">
           <span className="text-xs font-bold text-blue-400 uppercase tracking-widest bg-blue-500/10 border border-blue-500/20 px-3.5 py-1.5 rounded-full">
-            ESTOQUE EM ALTA
+            VEJA ALGUMAS DE NOSSAS LOJAS PARCEIRAS
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white mt-3 tracking-tight">
-            Destaques de nossas Revendas - Itens ilustrativo "fase de testes"
+            Destaques de Nossos Clientes - Itens ilustrativos &quot;fase de testes&quot;
           </h2>
         </div>
 
@@ -213,7 +193,6 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {veiculosDestaque.map((carro) => {
               const nomeLoja = carro.lojaNome;
-              const slugLoja = carro.lojaSlug;
 
               return (
                 <div 
@@ -242,7 +221,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
                     {/* Informações do Veículo */}
                     <div className="p-6 space-y-4">
                       <div className="text-xs text-gray-300 font-medium">
-                        {carro.ano_modelo || carro.ano_fabricacao} • {carro.combustivel || 'Flex'}
+                        {carro.ano_modelo || carro.ano_fabricacao} - {carro.combustivel || 'Flex'}
                       </div>
 
                       <div>
@@ -266,11 +245,8 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
                   <div className="p-6 pt-0">
                     <button
                       onClick={() => {
-                        // Pega o slug diretamente da relação do tenant ou usa o slug amigável padrão baseado no nome/id
-                        const slugLoja = carro.tenants?.slug || (carro.tenant_id === 'd1c8cb8f-dd65-45d4-8ab9-1621645d2501' ? 'mariaregina' : 'carro-barato');
-                        
-                        console.log("Navegando para o slug exato:", slugLoja);
-                        navigate(`/${slugLoja}`);
+                        const slugLojaUrl = carro.tenants?.slug || (carro.tenant_id === 'd1c8cb8f-dd65-45d4-8ab9-1621645d2501' ? 'mariaregina' : 'carro-barato');
+                        navigate(`/${slugLojaUrl}`);
                       }}
                       className="w-full bg-gray-950 hover:bg-gray-800 text-blue-400 hover:text-blue-300 border border-gray-800 text-xs font-bold py-3 rounded-xl transition flex items-center justify-center shadow-inner cursor-pointer"
                     >
@@ -289,8 +265,18 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
               to="/login"
               className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-blue-900/50 transition transform hover:scale-105 inline-block text-center"
             >
-              Criar Loja Agora →
+              Criar Minha Loja Agora →
             </Link>
+            <button
+              onClick={handleShare}
+              className="bg-gray-900 hover:bg-gray-800 text-gray-200 font-semibold px-6 py-4 rounded-xl border border-gray-800 shadow-lg transition flex items-center gap-2 transform hover:scale-105 cursor-pointer text-sm sm:text-base"
+              title="Compartilhar plataforma"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684" />
+              </svg>
+              {copiado ? 'Link Copiado! 🚀' : 'Compartilhar Site'}
+            </button>
           </div>
         )}
       </section>
@@ -300,7 +286,7 @@ export default function Home({ session, tenant, adminLogo, onNavigateRegister, o
         <div className="text-center max-w-2xl mx-auto space-y-4 mb-16">
           <span className="text-xs font-bold tracking-widest text-amber-500 uppercase">Recursos do Sistema</span>
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-            Tudo o que sua revenda precisa em um só lugar.
+            Tudo que o VENDEDOR precisa em um único lugar.
           </h2>
           <p className="text-gray-200 text-sm sm:text-base font-normal">
             Sem planilhas complicadas ou sites lentos. Plataforma moderna pensada para quem vende no pátio e na internet.

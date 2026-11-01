@@ -1,6 +1,4 @@
-import React from 'react';
-
-export default function Planos({ tenant, session, onSelectPlan, onNavigateRegister }) {
+export default function Planos({ tenant, session, onNavigateRegister }) {
   // Identifica o plano atual do lojista logado
   const statusAssinatura = String(tenant?.subscription_status || '').toLowerCase();
   const planoAtual = String(tenant?.plano || '').toLowerCase();
@@ -32,7 +30,7 @@ export default function Planos({ tenant, session, onSelectPlan, onNavigateRegist
     const nomeLoja = tenant?.nome_loja || tenant?.nome || 'Minha Loja';
     const emailUser = session?.user?.email || '';
 
-    let mensagem = `Olá! Sou da loja *${nomeLoja}* (${emailUser}) e gostaria de fazer o *UPGRADE* para o *Plano ${tipoPlano.toUpperCase()}* da plataforma Minha Loja de Carro.`;
+    const mensagem = `Olá! Sou da loja *${nomeLoja}* (${emailUser}) e gostaria de fazer o *UPGRADE* para o *Plano ${tipoPlano.toUpperCase()}* da plataforma Minha Loja de Carro.`;
     
     window.open(`https://wa.me/${whatsappAdmin}?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
@@ -59,99 +57,6 @@ export default function Planos({ tenant, session, onSelectPlan, onNavigateRegist
       {/* Grade de 3 Opções */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
         
-        {/* 1. Teste Gratuito (30 Dias) */}
-        <div className={`bg-gradient-to-b from-blue-900/30 to-gray-900 border ${isTrial ? 'border-2 border-green-500 shadow-green-900/20' : 'border-blue-500/40'} rounded-3xl p-8 shadow-xl flex flex-col justify-between relative`}>
-          {isTrial && (
-            <div className="absolute -top-3.5 left-8 bg-green-600 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">
-              ✓ Seu Plano Atual
-            </div>
-          )}
-          {!isTrial && (
-            <div className="absolute -top-3.5 left-8 bg-blue-600 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">
-              ✦ Comece Grátis
-            </div>
-          )}
-
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-sm font-bold uppercase tracking-wider text-blue-400">Teste Gratuito</span>
-              <span className="text-xs bg-blue-950 text-blue-300 border border-blue-800 px-2.5 py-1 rounded-lg">30 Dias</span>
-            </div>
-            
-            <div className="mb-6">
-              <span className="text-4xl font-black text-white">R$ 0</span>
-              <span className="text-gray-400 text-sm"> / 30 dias</span>
-            </div>
-
-            <p className="text-xs text-gray-400 mb-6 pb-6 border-b border-gray-800">
-              Perfeito para experimentar todas as ferramentas sem compromisso e sem precisar cadastrar cartão de crédito.
-            </p>
-
-            <ul className="space-y-3.5 text-sm text-gray-300 mb-8">
-              <li className="flex items-center gap-2.5"><span className="text-blue-400 font-bold">✓</span> Acesso completo por 30 dias</li>
-              <li className="flex items-center gap-2.5"><span className="text-blue-400 font-bold">✓</span> Cadastro de até 05 veículos</li>
-              <li className="flex items-center gap-2.5"><span className="text-blue-400 font-bold">✓</span> Vitrine digital personalizada</li>
-              <li className="flex items-center gap-2.5"><span className="text-blue-400 font-bold">✓</span> Botão de WhatsApp para clientes</li>
-            </ul>
-          </div>
-
-          <button
-            onClick={() => lidarComCliquePlano('trial')}
-            disabled={session && isTrial}
-            className={`w-full text-center font-bold py-3.5 rounded-xl transition shadow-lg ${
-              session && isTrial 
-                ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'
-                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/30 cursor-pointer'
-            }`}
-          >
-            {session ? (isTrial ? 'Plano Ativo' : 'Teste Encerrado') : 'Ativar 30 Dias Grátis'}
-          </button>
-        </div>
-
-        {/* 2. Plano Mensal */}
-        <div className={`bg-gray-900 border ${isMensal ? 'border-2 border-green-500 shadow-green-900/20' : 'border-gray-800 hover:border-gray-700'} rounded-3xl p-8 shadow-xl flex flex-col justify-between relative transition`}>
-          {isMensal && (
-            <div className="absolute -top-3.5 left-8 bg-green-600 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">
-              ✓ Seu Plano Atual
-            </div>
-          )}
-
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Plano Mensal</span>
-              <span className="text-xs bg-gray-800 text-gray-300 px-2.5 py-1 rounded-lg">Flexível</span>
-            </div>
-            
-            <div className="mb-6">
-              <span className="text-4xl font-black text-white">R$ 49,90</span>
-              <span className="text-gray-400 text-sm"> / mês</span>
-            </div>
-
-            <p className="text-xs text-gray-400 mb-6 pb-6 border-b border-gray-800">
-              Ideal para quem quer liberdade mês a mês, sem compromisso de longo prazo. Cancele quando quiser.
-            </p>
-
-            <ul className="space-y-3.5 text-sm text-gray-300 mb-8">
-              <li className="flex items-center gap-2.5"><span className="text-blue-500 font-bold">✓</span> Gestão de estoque sem limites</li>
-              <li className="flex items-center gap-2.5"><span className="text-blue-500 font-bold">✓</span> Vitrine digital personalizada</li>
-              <li className="flex items-center gap-2.5"><span className="text-blue-500 font-bold">✓</span> Botão de WhatsApp direto</li>
-              <li className="flex items-center gap-2.5"><span className="text-blue-500 font-bold">✓</span> Suporte técnico especializado</li>
-            </ul>
-          </div>
-
-          <button
-            onClick={() => lidarComCliquePlano('mensal')}
-            disabled={session && isMensal}
-            className={`w-full text-center font-bold py-3.5 rounded-xl transition shadow ${
-              session && isMensal
-                ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'
-                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/30 cursor-pointer'
-            }`}
-          >
-            {session ? (isMensal ? 'Plano Ativo' : '🚀 Fazer Upgrade (Mensal)') : 'Assinar Plano Mensal'}
-          </button>
-        </div>
-
         {/* 3. Plano Anual */}
         <div className={`bg-gradient-to-b from-blue-950/40 to-gray-900 border-2 ${isAnual ? 'border-green-500 shadow-green-900/20' : 'border-blue-600'} rounded-3xl p-8 shadow-2xl flex flex-col justify-between relative`}>
           {isAnual ? (
@@ -201,6 +106,99 @@ export default function Planos({ tenant, session, onSelectPlan, onNavigateRegist
           </button>
         </div>
 
+        {/* 2. Plano Mensal */}
+        <div className={`bg-gray-900 border ${isMensal ? 'border-2 border-green-500 shadow-green-900/20' : 'border-gray-800 hover:border-gray-700'} rounded-3xl p-8 shadow-xl flex flex-col justify-between relative transition`}>
+          {isMensal && (
+            <div className="absolute -top-3.5 left-8 bg-green-600 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">
+              ✓ Seu Plano Atual
+            </div>
+          )}
+
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Plano Mensal</span>
+              <span className="text-xs bg-gray-800 text-gray-300 px-2.5 py-1 rounded-lg">Flexível</span>
+            </div>
+            
+            <div className="mb-6">
+              <span className="text-4xl font-black text-white">R$ 49,90</span>
+              <span className="text-gray-400 text-sm"> / mês</span>
+            </div>
+
+            <p className="text-xs text-gray-400 mb-6 pb-6 border-b border-gray-800">
+              Ideal para quem quer liberdade mês a mês, sem compromisso de longo prazo. Cancele quando quiser.
+            </p>
+
+            <ul className="space-y-3.5 text-sm text-gray-300 mb-8">
+              <li className="flex items-center gap-2.5"><span className="text-blue-500 font-bold">✓</span> Gestão de estoque sem limites</li>
+              <li className="flex items-center gap-2.5"><span className="text-blue-500 font-bold">✓</span> Vitrine digital personalizada</li>
+              <li className="flex items-center gap-2.5"><span className="text-blue-500 font-bold">✓</span> Botão de WhatsApp direto</li>
+              <li className="flex items-center gap-2.5"><span className="text-blue-500 font-bold">✓</span> Suporte técnico especializado</li>
+            </ul>
+          </div>
+
+          <button
+            onClick={() => lidarComCliquePlano('mensal')}
+            disabled={session && isMensal}
+            className={`w-full text-center font-bold py-3.5 rounded-xl transition shadow ${
+              session && isMensal
+                ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/30 cursor-pointer'
+            }`}
+          >
+            {session ? (isMensal ? 'Plano Ativo' : '🚀 Fazer Upgrade (Mensal)') : 'Assinar Plano Mensal'}
+          </button>
+        </div>
+        
+        {/* 1. Teste Gratuito (30 Dias) */}
+        <div className={`bg-gradient-to-b from-blue-900/30 to-gray-900 border ${isTrial ? 'border-2 border-green-500 shadow-green-900/20' : 'border-blue-500/40'} rounded-3xl p-8 shadow-xl flex flex-col justify-between relative`}>
+          {isTrial && (
+            <div className="absolute -top-3.5 left-8 bg-green-600 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">
+              ✓ Seu Plano Atual
+            </div>
+          )}
+          {!isTrial && (
+            <div className="absolute -top-3.5 left-8 bg-blue-600 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">
+              ✦ Comece Grátis
+            </div>
+          )}
+
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-sm font-bold uppercase tracking-wider text-blue-400">Teste Gratuito</span>
+              <span className="text-xs bg-blue-950 text-blue-300 border border-blue-800 px-2.5 py-1 rounded-lg">30 Dias</span>
+            </div>
+            
+            <div className="mb-6">
+              <span className="text-4xl font-black text-white">R$ 0</span>
+              <span className="text-gray-400 text-sm"> / 30 dias</span>
+            </div>
+
+            <p className="text-xs text-gray-400 mb-6 pb-6 border-b border-gray-800">
+              Perfeito para experimentar todas as ferramentas sem compromisso e sem precisar cadastrar cartão de crédito.
+            </p>
+
+            <ul className="space-y-3.5 text-sm text-gray-300 mb-8">
+              <li className="flex items-center gap-2.5"><span className="text-blue-400 font-bold">✓</span> Acesso completo por 30 dias</li>
+              <li className="flex items-center gap-2.5"><span className="text-blue-400 font-bold">✓</span> Cadastro de até 03 veículos</li>
+              <li className="flex items-center gap-2.5"><span className="text-blue-400 font-bold">✓</span> Vitrine digital personalizada</li>
+              <li className="flex items-center gap-2.5"><span className="text-blue-400 font-bold">✓</span> Botão de WhatsApp para clientes</li>
+            </ul>
+          </div>
+
+          <button
+            onClick={() => lidarComCliquePlano('trial')}
+            disabled={session && isTrial}
+            className={`w-full text-center font-bold py-3.5 rounded-xl transition shadow-lg ${
+              session && isTrial 
+                ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/30 cursor-pointer'
+            }`}
+          >
+            {session ? (isTrial ? 'Plano Ativo' : 'Teste Encerrado') : 'Ativar 30 Dias Grátis'}
+          </button>
+        </div>
+        
       </div>
 
       <div className="mt-12 text-center text-xs text-gray-500">
@@ -209,3 +207,4 @@ export default function Planos({ tenant, session, onSelectPlan, onNavigateRegist
     </div>
   );
 }
+

@@ -1,7 +1,6 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 
-export default function Sobre({ onNavigatePlanos }) {
+export default function Sobre() {
   return (
     <div className="max-w-5xl mx-auto px-6 py-12 font-sans text-white">
       {/* Cabeçalho */}

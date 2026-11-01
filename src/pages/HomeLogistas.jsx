@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Link } from 'react-router-dom';
 
@@ -6,12 +6,37 @@ export default function HomeLogistas({ session, tenant }) {
   const [veiculos, setVeiculos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [nomeLojaAtual, setNomeLojaAtual] = useState('Minha Loja');
+  const [planoLoja, setPlanoLoja] = useState('free'); // Estado para armazenar o plano atual
 
-  // Estados de Filtros e Busca (mantidos para o estoque do próprio lojista)
+  // Estados de Filtros e Busca
   const [termoBusca, setTermoBusca] = useState('');
   const [filtroMarca, setFiltroMarca] = useState('');
   const [filtroCambio, setFiltroCambio] = useState('');
   const [filtroPrecoMax, setFiltroPrecoMax] = useState('');
+
+  // Função que aplica a regra de limites de destaque por plano
+  const aplicarLimiteDeDestaques = (veiculosList, plano) => {
+    // Identifica quais campos definem o destaque (pode ser 'destaque_home' ou 'destaque')
+    const destaques = veiculosList.filter(v => v.destaque_home === true || v.destaque === true);
+    const normais = veiculosList.filter(v => v.destaque_home !== true && v.destaque !== true);
+
+    let limiteDestaques = 3; // Plano Free (padrão)
+    
+    const planoLower = String(plano).toLowerCase();
+    if (planoLower.includes('mensal') || planoLower.includes('trial')) {
+      limiteDestaques = 20;
+    } else if (planoLower.includes('anual') || planoLower.includes('vip') || planoLower.includes('ilimitado')) {
+      limiteDestaques = Infinity; // Ilimitado para o anual
+    }
+
+    // Corta os destaques permitidos de acordo com o plano
+    const destaquesPermitidos = destaques.slice(0, limiteDestaques);
+    
+    // Os excedentes que passaram do limite voltam a ser exibidos como normais
+    const destaquesExcedentes = destaques.slice(limiteDestaques);
+
+    return [...destaquesPermitidos, ...normais, ...destaquesExcedentes];
+  };
 
   useEffect(() => {
     const fetchEstoqueLoja = async () => {
@@ -24,14 +49,15 @@ export default function HomeLogistas({ session, tenant }) {
           return;
         }
 
-        // 1. Descobre o tenant correto e o id da loja associada a este user_id
+        // 1. Descobre o tenant correto, o plano e o id da loja associada a este user_id
         let tenantIdAtual = tenant?.id;
         let nomeLojaTemp = tenant?.nome_loja || 'Minha Loja';
+        let statusPlanoTemp = tenant?.subscription_status || 'free';
 
         if (!tenantIdAtual) {
           const { data: tenantData, error: tenantError } = await supabase
             .from('tenants')
-            .select('id, nome_loja')
+            .select('id, nome_loja, subscription_status')
             .eq('user_id', userId)
             .maybeSingle();
 
@@ -40,10 +66,12 @@ export default function HomeLogistas({ session, tenant }) {
           if (tenantData) {
             tenantIdAtual = tenantData.id;
             nomeLojaTemp = tenantData.nome_loja || 'Minha Loja';
+            statusPlanoTemp = tenantData.subscription_status || 'free';
           }
         }
 
         setNomeLojaAtual(nomeLojaTemp);
+        setPlanoLoja(statusPlanoTemp);
 
         if (!tenantIdAtual) {
           setVeiculos([]);
@@ -57,11 +85,15 @@ export default function HomeLogistas({ session, tenant }) {
           .select('*')
           .eq('tenant_id', tenantIdAtual)
           .neq('status', 'Vendido')
+          .order('destaque_home', { ascending: false }) // Prioriza os destaques
           .order('created_at', { ascending: false });
 
         if (veiculosError) throw veiculosError;
 
-        setVeiculos(veiculosData || []);
+        // 3. Aplica a regra de limite de destaques baseada no plano do lojista
+        const listaProcessada = aplicarLimiteDeDestaques(veiculosData || [], statusPlanoTemp);
+
+        setVeiculos(listaProcessada);
       } catch (err) {
         console.error('Erro ao carregar veículos da loja:', err);
       } finally {
@@ -95,8 +127,11 @@ export default function HomeLogistas({ session, tenant }) {
       {/* Cabeçalho do Painel do Lojista */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10 pb-6 border-b border-gray-800">
         <div>
-          <div className="inline-block bg-blue-950 border border-blue-800/60 px-3 py-1 rounded-full text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
-            Painel Exclusivo da Revenda
+          <div className="inline-flex items-center gap-2 bg-blue-950 border border-blue-800/60 px-3 py-1 rounded-full text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
+            <span>Painel Exclusivo da Revenda</span>
+            <span className="bg-blue-600/40 text-blue-300 px-2 py-0.5 rounded-full text-[10px] capitalize">
+              Plano: {planoLoja}
+            </span>
           </div>
           <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white">
             {nomeLojaAtual}
@@ -199,7 +234,7 @@ export default function HomeLogistas({ session, tenant }) {
                   <span className="absolute top-3 left-3 bg-blue-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
                     {nomeLojaAtual}
                   </span>
-                  {veiculo.destaque && (
+                  {(veiculo.destaque_home || veiculo.destaque) && (
                     <span className="absolute top-3 right-3 bg-amber-500 text-gray-950 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
                       ★ Destaque
                     </span>

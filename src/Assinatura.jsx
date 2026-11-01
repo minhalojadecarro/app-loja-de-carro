@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 
 export default function Assinatura() {
@@ -11,11 +11,8 @@ export default function Assinatura() {
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState(null);
 
-  useEffect(() => {
-    carregarTodasLojas();
-  }, []);
-
-  const carregarTodasLojas = async () => {
+  // Declarada antes do useEffect e envolvida em useCallback
+  const carregarTodasLojas = useCallback(async () => {
     setLoading(true);
     setMensagem(null);
     try {
@@ -32,7 +29,14 @@ export default function Assinatura() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      carregarTodasLojas();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [carregarTodasLojas]);
 
   const handleBuscar = async (e) => {
     e.preventDefault();

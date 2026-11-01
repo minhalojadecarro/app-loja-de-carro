@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
 export default function ModalFinanceiroVeiculo({ veiculo, tenantId, onClose, onSave }) {
@@ -51,7 +51,7 @@ export default function ModalFinanceiroVeiculo({ veiculo, tenantId, onClose, onS
       if (!veiculo?.id) return;
       
       // Usamos .maybeSingle() para evitar erro 406 caso o veículo ainda não tenha DRE salva
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('veiculo_financeiro')
         .select('*')
         .eq('veiculo_id', veiculo.id)
@@ -93,15 +93,15 @@ export default function ModalFinanceiroVeiculo({ veiculo, tenantId, onClose, onS
     setLoading(true);
 
     try {
-      const valorVendaNum = converterParaNumero(valorVendaRealFmt);
-      const foiVendido = valorVendaNum > 0;
+      const valorVendaCalculado = converterParaNumero(valorVendaRealFmt);
+      const foiVendido = valorVendaCalculado > 0;
       const novoStatus = foiVendido ? 'Vendido' : 'Disponível';
 
       const payload = {
         tenant_id: tenantId,
         veiculo_id: veiculo.id,
         valor_compra: converterParaNumero(valorCompraFmt),
-        valor_venda_real: valorVendaNum,
+        valor_venda_real: valorVendaCalculado,
         custo_documentacao: converterParaNumero(custoDocFmt),
         custo_mecanica: converterParaNumero(custoMecanicaFmt),
         custo_funilaria: converterParaNumero(custoFunilariaFmt),
@@ -134,9 +134,8 @@ export default function ModalFinanceiroVeiculo({ veiculo, tenantId, onClose, onS
       alert(`DRE e fechamento da venda salvos com sucesso! Status do veículo: ${novoStatus.toUpperCase()}`);
       if (onSave) onSave();
       if (onClose) onClose();
-    } catch (error) {
-      console.error('Erro ao salvar financeiro:', error.message);
-      alert(`Erro ao salvar: ${error.message}`);
+    } catch {
+      alert('Erro ao salvar o fechamento financeiro. Tente novamente.');
     } finally {
       setLoading(false);
     }

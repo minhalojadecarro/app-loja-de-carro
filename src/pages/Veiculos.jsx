@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import ModalFinanceiroVeiculo from '../components/ModalDRE';
 
@@ -10,6 +10,16 @@ export default function Veiculos({ session, tenant, isAdmin }) {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState(null);
+
+  // --- ESTADOS DE FILTRO DO ESTOQUE ---
+  const [filtroBusca, setFiltroBusca] = useState('');
+  const [filtroMarca, setFiltroMarca] = useState('todas');
+  const [filtroCambio, setFiltroCambio] = useState('todos');
+  const [filtroPrecoMax, setFiltroPrecoMax] = useState('');
+  const [filtroTenantAdmin, setFiltroTenantAdmin] = useState('todos');
+
+  // Novo estado para controlar se é Carro ou Moto ('carro' ou 'moto')
+  const [tipoItem, setTipoItem] = useState('carro');
 
   // Estados dos seletores exclusivos da API
   const [marcasApi, setMarcasApi] = useState([]);
@@ -31,6 +41,9 @@ export default function Veiculos({ session, tenant, isAdmin }) {
   const [fotoUrl, setFotoUrl] = useState('');
   const [destaqueHome, setDestaqueHome] = useState(false);
 
+  // Estado para armazenar o valor FIPE obtido da API
+  const [valorFipeApi, setValorFipeApi] = useState(0);
+
   // Verificação de administrador com fallback de segurança por e-mail
   const eAdministrador = Boolean(
     isAdmin || 
@@ -43,7 +56,8 @@ export default function Veiculos({ session, tenant, isAdmin }) {
 
   const meuTenantId = tenant?.id || session?.user?.id;
 
-  const fetchData = async () => {
+  // fetchData envolvido corretamente com useCallback e dependências limpas
+  const fetchData = useCallback(async () => {
     setLoading(true);
 
     const { data: tenantsData } = await supabase.from('tenants').select('*');
@@ -57,8 +71,12 @@ export default function Veiculos({ session, tenant, isAdmin }) {
       }
     }
 
+    // Segmento baseado no tipo atual
+    const segmentoApi = tipoItem === 'moto' ? 'motos' : 'carros';
+
+    // Busca inicial de marcas com base no tipo atual
     try {
-      const res = await fetch('https://parallelum.com.br/fipe/api/v1/carros/marcas');
+      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/${segmentoApi}/marcas`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setMarcasApi(data);
@@ -89,11 +107,40 @@ export default function Veiculos({ session, tenant, isAdmin }) {
       setVeiculos(listaMapeada);
     }
     setLoading(false);
-  };
+  }, [eAdministrador, meuTenantId, tenantId, tipoItem]);
 
+  // Executa o fetch de forma assíncrona desacoplada para evitar o aviso de setState síncrono no effect
   useEffect(() => {
-    fetchData();
-  }, [eAdministrador, meuTenantId, tenant]);
+    const timer = setTimeout(() => {
+      fetchData();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchData]);
+
+  // Função para alternar entre Carro e Moto no formulário
+  const handleTipoItemChange = async (novoTipo) => {
+    setTipoItem(novoTipo);
+    setMarcaObj({ id: '', name: '' });
+    setModeloObj({ id: '', name: '' });
+    setAnoObj({ id: '', name: '' });
+    setModelosApi([]);
+    setAnosApi([]);
+    setVersao('');
+    setCombustivel('');
+    setValorFipeApi(0);
+
+    try {
+      const segmento = novoTipo === 'moto' ? 'motos' : 'carros';
+      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/${segmento}/marcas`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setMarcasApi(data);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar marcas:', err);
+      setMarcasApi([]);
+    }
+  };
 
   const handlePrecoChange = (e) => {
     let valor = e.target.value.replace(/\D/g, '');
@@ -148,6 +195,9 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     }
   };
 
+  // Função auxiliar para definir o segmento correto na URL da API FIPE
+  const getApiSegmento = () => (tipoItem === 'moto' ? 'motos' : 'carros');
+
   const handleMarcaChange = async (e) => {
     const marcaCod = e.target.value;
     const marcaSelecionada = marcasApi.find(m => String(m.codigo || m.code) === String(marcaCod));
@@ -162,11 +212,12 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     setAnoObj({ id: '', name: '' });
     setVersao('');
     setCombustivel('');
+    setValorFipeApi(0);
 
     if (!marcaCod) return;
 
     try {
-      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaCod}/modelos`);
+      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/${getApiSegmento()}/marcas/${marcaCod}/modelos`);
       const data = await res.json();
       if (data && Array.isArray(data.modelos)) {
         setModelosApi(data.modelos);
@@ -189,11 +240,12 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     setAnoObj({ id: '', name: '' });
     setVersao('');
     setCombustivel('');
+    setValorFipeApi(0);
 
     if (!marcaObj.id || !modeloCod) return;
 
     try {
-      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaObj.id}/modelos/${modeloCod}/anos`);
+      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/${getApiSegmento()}/marcas/${marcaObj.id}/modelos/${modeloCod}/anos`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setAnosApi(data);
@@ -216,26 +268,44 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     if (!marcaObj.id || !modeloObj.id || !anoCod) return;
 
     try {
-      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${marcaObj.id}/modelos/${modeloObj.id}/anos/${anoCod}`);
+      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/${getApiSegmento()}/marcas/${marcaObj.id}/modelos/${modeloObj.id}/anos/${anoCod}`);
       const data = await res.json();
       
       if (data) {
         if (data.Combustivel) setCombustivel(data.Combustivel);
         if (data.Modelo) setVersao(data.Modelo);
+        
+        if (data.Valor) {
+          const valorLimpo = data.Valor.replace('R$', '').trim().replace(/\./g, '').replace(',', '.');
+          setValorFipeApi(parseFloat(valorLimpo) || 0);
+        }
       }
     } catch (err) {
       console.error('Erro ao buscar detalhes da API:', err);
     }
   };
 
-  const handleEdit = (veiculo) => {
+  const handleEdit = async (veiculo) => {
     setEditingId(veiculo.id);
+    const tipoSalvo = veiculo.tipo || 'carro';
+    setTipoItem(tipoSalvo);
     setTenantId(veiculo.tenant_id || meuTenantId);
     setMarcaObj({ id: '', name: veiculo.marca || '' });
     setModeloObj({ id: '', name: veiculo.modelo || '' });
     setAnoObj({ id: '', name: String(veiculo.ano_modelo || veiculo.ano_fabricacao || '') });
     setVersao(veiculo.versao || '');
     setCombustivel(veiculo.combustivel || '');
+    setValorFipeApi(veiculo.valorfipe || 0);
+    
+    try {
+      const res = await fetch(`https://parallelum.com.br/fipe/api/v1/${tipoSalvo === 'moto' ? 'motos' : 'carros'}/marcas`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setMarcasApi(data);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar marcas na edição:', err);
+    }
     
     if (veiculo.preco) {
       setPrecoFormatado(Number(veiculo.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -252,18 +322,17 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     setCor(veiculo.cor || '');
     setCambio(veiculo.cambio || '');
     setFotoUrl(veiculo.foto_principal_url || '');
-    // Atualizado para checar o status_destaque da fila
     setDestaqueHome(veiculo.status_destaque === 'em_evidencia');
     
     setShowCadastroModal(true);
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Tem certeza que deseja remover este veículo do estoque?')) return;
+    if (!window.confirm('Tem certeza que deseja remover este item do estoque?')) return;
 
     const { error } = await supabase.from('veiculos').delete().eq('id', id);
     if (error) {
-      alert('Erro ao excluir veículo: ' + error.message);
+      alert('Erro ao excluir item: ' + error.message);
     } else {
       await supabase.from('veiculo_fotos').delete().eq('veiculo_id', id);
       fetchData();
@@ -272,10 +341,15 @@ export default function Veiculos({ session, tenant, isAdmin }) {
 
   const handleToggleDestaque = async (veiculoId, statusAtual) => {
     const novoStatus = statusAtual === 'em_evidencia' ? 'normal' : 'em_evidencia';
+    
+    const agora = new Date();
+    const dataInicio = novoStatus === 'em_evidencia' ? agora.toISOString() : null;
+    const dataFim = novoStatus === 'em_evidencia' ? new Date(agora.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString() : null;
+
     const dadosUpdate = {
       status_destaque: novoStatus,
-      data_inicio_destaque: novoStatus === 'em_evidencia' ? new Date().toISOString() : null,
-      data_fim_destaque: novoStatus === 'em_evidencia' ? new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString() : null
+      data_inicio_destaque: dataInicio,
+      data_fim_destaque: dataFim
     };
 
     const { error } = await supabase
@@ -292,6 +366,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
 
   const handleCancelEdit = () => {
     setEditingId(null);
+    setTipoItem('carro');
     setTenantId(eAdministrador ? (tenants[0]?.id || '') : meuTenantId);
     setMarcaObj({ id: '', name: '' });
     setModeloObj({ id: '', name: '' });
@@ -306,6 +381,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     setCambio('');
     setFotoUrl('');
     setDestaqueHome(false);
+    setValorFipeApi(0);
     setShowCadastroModal(false);
   };
 
@@ -348,6 +424,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
 
     const dadosVeiculo = {
       tenant_id: idTenantFinal,
+      tipo: tipoItem,
       marca: marcaObj.name,
       modelo: modeloObj.name,
       versao,
@@ -355,6 +432,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
       ano_modelo: anoNumerico,
       combustivel,
       preco: precoNumerico,
+      valorfipe: valorFipeApi,
       quilometragem: kmNumerico,
       cor,
       cambio,
@@ -372,7 +450,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
         .eq('id', editingId);
 
       if (error) {
-        alert('Erro ao atualizar veículo: ' + error.message);
+        alert('Erro ao atualizar item: ' + error.message);
         return;
       }
 
@@ -382,7 +460,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
         ], { onConflict: 'veiculo_id' });
       }
 
-      alert('Veículo atualizado com sucesso!');
+      alert('Item atualizado com sucesso!');
     } else {
       const { data: veiculoInserido, error } = await supabase
         .from('veiculos')
@@ -390,7 +468,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
         .select();
 
       if (error) {
-        alert('Erro ao cadastrar veículo: ' + error.message);
+        alert('Erro ao cadastrar item: ' + error.message);
         return;
       }
 
@@ -405,12 +483,31 @@ export default function Veiculos({ session, tenant, isAdmin }) {
         }]);
       }
 
-      alert('Veículo cadastrado com sucesso!');
+      alert('Item cadastrado com sucesso!');
     }
 
     handleCancelEdit();
     fetchData();
   };
+
+  // --- LÓGICA DE FILTRAGEM DO ESTOQUE ---
+  const veiculosFiltrados = veiculos.filter((v) => {
+    const termoBusca = filtroBusca.toLowerCase();
+    const textoVeiculo = `${v.marca || ''} ${v.modelo || ''} ${v.versao || ''}`.toLowerCase();
+    const matchBusca = !termoBusca || textoVeiculo.includes(termoBusca);
+
+    const matchMarca = filtroMarca === 'todas' || String(v.marca).toLowerCase() === String(filtroMarca).toLowerCase();
+    const matchCambio = filtroCambio === 'todos' || String(v.cambio || '').toLowerCase() === String(filtroCambio).toLowerCase();
+
+    const precoNum = Number(v.preco || 0);
+    const matchPreco = !filtroPrecoMax || precoNum <= Number(filtroPrecoMax);
+
+    const matchTenantAdmin = !eAdministrador || filtroTenantAdmin === 'todos' || String(v.tenant_id) === String(filtroTenantAdmin);
+
+    return matchBusca && matchMarca && matchCambio && matchPreco && matchTenantAdmin;
+  });
+
+  const marcasDisponiveis = [...new Set(veiculos.map(v => v.marca).filter(Boolean))];
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10 w-full bg-gray-950 text-white min-h-screen">
@@ -418,18 +515,107 @@ export default function Veiculos({ session, tenant, isAdmin }) {
       {/* CABEÇALHO COM O BOTÃO DE NOVO VEÍCULO */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-white">Gestão de Veículos do Estoque</h1>
+          <h1 className="text-3xl font-black tracking-tight text-white">Gestão de Veículos e Motos</h1>
           <p className="text-sm text-gray-400 mt-1">Registo, edição e controlo completo do inventário</p>
         </div>
         <button
           onClick={() => { handleCancelEdit(); setShowCadastroModal(true); }}
-          className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2.5 rounded-xl transition shadow-lg shadow-blue-900/30 flex items-center gap-2 text-sm"
+          className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2.5 rounded-xl transition shadow-lg shadow-blue-900/30 flex items-center gap-2 text-sm cursor-pointer"
         >
-          🚗 + Cadastrar Veículo
+          🚗🏍️ + Cadastrar Novo Item
         </button>
       </div>
 
-      {/* MODAL DE CADASTRO / EDIÇÃO DE VEÍCULOS */}
+      {/* BARRA DE FILTROS AVANÇADOS */}
+      <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl mb-8 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Filtrar Seu Estoque</h3>
+          {(filtroBusca || filtroMarca !== 'todas' || filtroCambio !== 'todos' || filtroPrecoMax || filtroTenantAdmin !== 'todos') && (
+            <button 
+              onClick={() => {
+                setFiltroBusca('');
+                setFiltroMarca('todas');
+                setFiltroCambio('todos');
+                setFiltroPrecoMax('');
+                setFiltroTenantAdmin('todos');
+              }}
+              className="text-xs text-blue-400 hover:underline cursor-pointer"
+            >
+              Limpar Filtros
+            </button>
+          )}
+        </div>
+
+        <div className={`grid grid-cols-1 ${eAdministrador ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-4`}>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-400">Pesquisar por Marca ou Modelo</label>
+            <input
+              type="text"
+              value={filtroBusca}
+              onChange={(e) => setFiltroBusca(e.target.value)}
+              placeholder="Ex: Corolla, Onix, Fiat..."
+              className="bg-gray-950 border border-gray-800 text-white px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-400">Marca</label>
+            <select
+              value={filtroMarca}
+              onChange={(e) => setFiltroMarca(e.target.value)}
+              className="bg-gray-950 border border-gray-800 text-white px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+            >
+              <option value="todas">Todas as Marcas</option>
+              {marcasDisponiveis.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-400">Câmbio</label>
+            <select
+              value={filtroCambio}
+              onChange={(e) => setFiltroCambio(e.target.value)}
+              className="bg-gray-950 border border-gray-800 text-white px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+            >
+              <option value="todos">Todos</option>
+              <option value="manual">Manual</option>
+              <option value="automático">Automático</option>
+              <option value="cvt">CVT</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-400">Preço Máximo (R$)</label>
+            <input
+              type="number"
+              value={filtroPrecoMax}
+              onChange={(e) => setFiltroPrecoMax(e.target.value)}
+              placeholder="Ex: 80000"
+              className="bg-gray-950 border border-gray-800 text-white px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {eAdministrador && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-amber-400">Filtrar por Revenda</label>
+              <select
+                value={filtroTenantAdmin}
+                onChange={(e) => setFiltroTenantAdmin(e.target.value)}
+                className="bg-gray-950 border border-amber-500/50 text-white px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="todos">Todas as Lojas</option>
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>{t.nome_loja || t.nome || t.name || 'Loja sem Nome'}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* MODAL DE CADASTRO / EDIÇÃO DE VEÍCULOS E MOTOS */}
       {showCadastroModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -442,7 +628,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
           }}>
             <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-800">
               <h2 className="text-xl font-bold text-white">
-                {editingId ? 'Editar Veículo' : 'Cadastrar Novo Veículo no Estoque'}
+                {editingId ? 'Editar Registo' : 'Cadastrar Veículo ou Moto no Estoque'}
               </h2>
               <button 
                 onClick={handleCancelEdit} 
@@ -453,6 +639,33 @@ export default function Veiculos({ session, tenant, isAdmin }) {
             </div>
             
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              
+              {/* SELETOR DE TIPO (CARRO OU MOTO) */}
+              <div className="md:col-span-2 bg-gray-900 border border-gray-800 p-2 rounded-xl flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleTipoItemChange('carro')}
+                  className={`flex-1 py-2.5 rounded-lg font-bold text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 cursor-pointer ${
+                    tipoItem === 'carro' 
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'bg-transparent text-gray-400 hover:text-white'
+                  }`}
+                >
+                  🚗 Carro
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTipoItemChange('moto')}
+                  className={`flex-1 py-2.5 rounded-lg font-bold text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 cursor-pointer ${
+                    tipoItem === 'moto' 
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'bg-transparent text-gray-400 hover:text-white'
+                  }`}
+                >
+                  🏍️ Moto
+                </button>
+              </div>
+
               {eAdministrador && (
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
@@ -461,7 +674,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                   <select
                     value={tenantId}
                     onChange={(e) => setTenantId(e.target.value)}
-                    className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition"
+                    className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition cursor-pointer"
                     required
                   >
                     {tenants.map((loja) => (
@@ -480,7 +693,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                 <select
                   value={marcaObj.id}
                   onChange={handleMarcaChange}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition"
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition cursor-pointer"
                   required={!editingId}
                 >
                   <option value="">{editingId ? 'Alterar Marca (Opcional)' : 'Selecione a Marca'}</option>
@@ -499,7 +712,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                 <select
                   value={modeloObj.id}
                   onChange={handleModeloChange}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition"
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition cursor-pointer"
                 >
                   <option value="">{editingId ? 'Alterar Modelo (Opcional)' : 'Selecione o Modelo'}</option>
                   {modelosApi.map((mod) => (
@@ -517,7 +730,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                 <select
                   value={anoObj.id}
                   onChange={handleAnoChange}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition"
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition cursor-pointer"
                 >
                   <option value="">{editingId ? 'Alterar Ano (Opcional)' : 'Selecione o Ano'}</option>
                   {anosApi.map((ano) => (
@@ -526,19 +739,6 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
-                  Versão / Detalhes
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: 1.0 Flex 5p"
-                  value={versao}
-                  onChange={(e) => setVersao(e.target.value)}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-blue-600 transition"
-                />
               </div>
 
               <div>
@@ -553,6 +753,25 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                   className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-blue-600 transition"
                   required
                 />
+              </div>
+
+              {/* Bloco de Referência do Valor FIPE */}
+              <div className="md:col-span-2 bg-blue-950/30 border border-blue-900/50 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-400 block">
+                    📊 Referência de Mercado (Tabela FIPE)
+                  </span>
+                  <span className="text-[11px] text-gray-400">
+                    Valor médio oficial consultado automaticamente para este modelo/ano.
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-lg font-black text-green-400">
+                    {valorFipeApi > 0 
+                      ? valorFipeApi.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) 
+                      : 'Selecione o ano'}
+                  </span>
+                </div>
               </div>
 
               <div>
@@ -589,7 +808,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                 <select
                   value={cor}
                   onChange={(e) => setCor(e.target.value)}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition"
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition cursor-pointer"
                   required
                 >
                   <option value="">Selecione a Cor</option>
@@ -608,17 +827,18 @@ export default function Veiculos({ session, tenant, isAdmin }) {
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
-                  Câmbio
+                  Câmbio / Transmissão
                 </label>
                 <select
                   value={cambio}
                   onChange={(e) => setCambio(e.target.value)}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition"
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 transition cursor-pointer"
                 >
                   <option value="">Selecione</option>
                   <option value="Automático">Automático</option>
                   <option value="Manual">Manual</option>
                   <option value="CVT">CVT</option>
+                  <option value="Semi-automática">Semi-automática</option>
                 </select>
               </div>
 
@@ -632,14 +852,14 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                   />
                   <div>
                     <span className="text-xs font-bold uppercase tracking-wider text-white block">Destacar na Home Principal</span>
-                    <span className="text-[11px] text-gray-400">Exibe este veículo na vitrine principal da plataforma (Fila rotativa de 2 dias)</span>
+                    <span className="text-[11px] text-gray-400">Exibe este item na vitrine principal da plataforma (Fila rotativa de 2 dias)</span>
                   </div>
                 </label>
               </div>
 
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">
-                  Foto Principal do Veículo
+                  Foto Principal do Item
                 </label>
                 <input
                   type="file"
@@ -661,14 +881,14 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold px-5 py-2.5 rounded-xl transition text-sm"
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold px-5 py-2.5 rounded-xl transition text-sm cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 rounded-xl transition shadow-lg text-sm disabled:opacity-50"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 rounded-xl transition shadow-lg text-sm disabled:opacity-50 cursor-pointer"
                 >
                   {editingId ? 'Salvar Alterações' : 'Adicionar ao Estoque'}
                 </button>
@@ -678,24 +898,27 @@ export default function Veiculos({ session, tenant, isAdmin }) {
         </div>
       )}
 
-      {/* TABELA DE VEÍCULOS EM ESTOQUE COM DESTAQUE TOTAL */}
+      {/* TABELA DE VEÍCULOS E MOTOS EM ESTOQUE */}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="p-6 border-b border-gray-800 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-white">Veículos em Estoque</h2>
-          <span className="text-xs text-gray-400 font-medium">Total: {veiculos.length} veículos</span>
+          <h2 className="text-lg font-bold text-white">Inventário em Estoque (Carros e Motos)</h2>
+          <span className="text-xs text-gray-400 font-medium">Exibindo {veiculosFiltrados.length} de {veiculos.length} item(ns)</span>
         </div>
 
         {loading ? (
-          <p className="p-6 text-center text-gray-500">A carregar veículos...</p>
-        ) : veiculos.length === 0 ? (
-          <p className="p-6 text-center text-gray-500">Nenhum veículo cadastrado ainda.</p>
+          <p className="p-6 text-center text-gray-500 animate-pulse">A carregar itens...</p>
+        ) : veiculosFiltrados.length === 0 ? (
+          <div className="p-12 text-center text-gray-500 space-y-2">
+            <p className="text-base font-bold">Nenhum veículo ou moto encontrado.</p>
+            <p className="text-xs">Tente ajustar os filtros de busca ou cadastre um novo item.</p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-gray-300">
               <thead className="bg-gray-950 text-xs uppercase tracking-wider text-gray-400 border-b border-gray-800">
                 <tr>
                   <th className="px-6 py-4">Foto</th>
-                  <th className="px-6 py-4">Veículo</th>
+                  <th className="px-6 py-4">Tipo / Veículo</th>
                   <th className="px-6 py-4">Ano / Combustível</th>
                   <th className="px-6 py-4">Preço</th>
                   <th className="px-6 py-4 text-center">Status</th>
@@ -705,12 +928,11 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                   )}
 
                   <th className="px-6 py-4 text-center">Vitrine Home (Fila)</th>
-
                   <th className="px-6 py-4 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {veiculos.map((veiculo) => (
+                {veiculosFiltrados.map((veiculo) => (
                   <tr key={veiculo.id} className="hover:bg-gray-800/50 transition">
                     <td className="px-6 py-4">
                       {veiculo.foto_principal_url ? (
@@ -723,6 +945,9 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                     </td>
 
                     <td className="px-6 py-4 font-bold text-white">
+                      <span className="text-[10px] uppercase bg-gray-800 px-2 py-0.5 rounded text-blue-400 mr-2">
+                        {veiculo.tipo === 'moto' ? '🏍️ Moto' : '🚗 Carro'}
+                      </span>
                       {veiculo.marca} {veiculo.modelo}
                       <span className="block text-xs font-normal text-gray-400">{veiculo.versao}</span>
                     </td>
@@ -757,7 +982,7 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                       <button
                         onClick={() => handleToggleDestaque(veiculo.id, veiculo.status_destaque)}
                         disabled={veiculo.status === 'Vendido'}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow cursor-pointer ${
                           veiculo.status === 'Vendido'
                             ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed border border-gray-800'
                             : veiculo.status_destaque === 'em_evidencia'
@@ -773,20 +998,20 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => setVeiculoFinanceiroModal(veiculo)}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow flex items-center gap-1"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow flex items-center gap-1 cursor-pointer"
                           title="Gestão Financeira e Fechamento de Venda"
                         >
                           💰 DRE
                         </button>
                         <button
                           onClick={() => handleEdit(veiculo)}
-                          className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition border border-blue-600/30"
+                          className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition border border-blue-600/30 cursor-pointer"
                         >
                           Editar
                         </button>
                         <button
                           onClick={() => handleDelete(veiculo.id)}
-                          className="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition border border-red-600/30"
+                          className="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition border border-red-600/30 cursor-pointer"
                         >
                           Excluir
                         </button>

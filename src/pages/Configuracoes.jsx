@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
 export default function Configuracoes({ session, tenant, onTenantUpdated }) {
@@ -9,7 +9,7 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
   const [nomeLoja, setNomeLoja] = useState(tenant?.nome_loja || '');
   const [whatsapp, setWhatsapp] = useState(tenant?.whatsapp || '');
   
-  // Logos e Fotos
+  // Logos, Fotos e Capa da Vitrine
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [logoUrl, setLogoUrl] = useState(tenant?.logo_url || '');
@@ -17,6 +17,10 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
   const [fotoFile, setFotoFile] = useState(null);
   const [fotoPreview, setFotoPreview] = useState(null);
   const [fotoPerfilUrl, setFotoPerfilUrl] = useState(tenant?.foto_perfil_url || '');
+
+  const [capaFile, setCapaFile] = useState(null);
+  const [capaPreview, setCapaPreview] = useState(null);
+  const [capaVitrineUrl, setCapaVitrineUrl] = useState(tenant?.capa_vitrine_url || '');
 
   // Dados Bancários e Pix
   const [banco, setBanco] = useState(tenant?.banco || '');
@@ -45,6 +49,7 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
         setWhatsapp(tenantData.whatsapp || '');
         setLogoUrl(tenantData.logo_url || '');
         setFotoPerfilUrl(tenantData.foto_perfil_url || '');
+        setCapaVitrineUrl(tenantData.capa_vitrine_url || '');
         
         setBanco(tenantData.banco || '');
         setAgencia(tenantData.agencia || '');
@@ -74,6 +79,14 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
     }
   };
 
+  const handleCapaChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setCapaFile(file);
+      setCapaPreview(URL.createObjectURL(file));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -92,6 +105,7 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
     try {
       let novaLogoUrl = logoUrl;
       let novaFotoUrl = fotoPerfilUrl;
+      let novaCapaUrl = capaVitrineUrl;
 
       // 1. Upload da Logo da Loja se alterada
       if (logoFile) {
@@ -127,10 +141,28 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
         novaFotoUrl = publicUrlData.publicUrl;
       }
 
+      // 3. Upload da Capa da Vitrine para Redes Sociais se alterada
+      if (capaFile) {
+        const fileExt = capaFile.name.split('.').pop();
+        const fileName = `capa-vitrine-${tenantId}-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('logos')
+          .upload(fileName, capaFile, { upsert: true });
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('logos')
+          .getPublicUrl(fileName);
+
+        novaCapaUrl = publicUrlData.publicUrl;
+      }
+
       const dadosParaAtualizar = {
         nome_loja: nomeLoja,
         logo_url: novaLogoUrl,
         foto_perfil_url: novaFotoUrl,
+        capa_vitrine_url: novaCapaUrl,
         whatsapp: whatsapp,
         banco: banco,
         agencia: agencia,
@@ -140,7 +172,7 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
         titular_conta: titularConta
       };
 
-      // 3. ATUALIZAÇÃO SEGURA: Utiliza simultaneamente o id da loja E o user_id para isolamento absoluto
+      // 4. ATUALIZAÇÃO SEGURA: Utiliza simultaneamente o id da loja E o user_id para isolamento absoluto
       const { data: tenantUpdatedData, error: tenantError } = await supabase
         .from('tenants')
         .update(dadosParaAtualizar)
@@ -160,6 +192,8 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
       setLogoFile(null);
       setFotoPerfilUrl(novaFotoUrl);
       setFotoFile(null);
+      setCapaVitrineUrl(novaCapaUrl);
+      setCapaFile(null);
 
       localStorage.setItem('tenant_logo_cache', novaLogoUrl);
       localStorage.setItem('tenant_nome_cache', nomeLoja);
@@ -367,6 +401,77 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
                 </label>
               </div>
             </div>
+
+            {/* --- UPLOAD DA CAPA DA VITRINE (REDES SOCIAIS / OG IMAGE) --- */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#ccc' }}>
+                Imagem de Capa para Redes Sociais (Facebook / WhatsApp):
+              </label>
+              <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '10px' }}>
+                Esta imagem aparecerá como miniatura sempre que você ou alguém compartilhar o link da sua vitrine.
+              </p>
+
+              <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    width: '120px',
+                    height: '70px',
+                    borderRadius: '8px',
+                    border: '1px solid #334155',
+                    overflow: 'hidden',
+                    backgroundColor: '#020617',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    {capaPreview || capaVitrineUrl ? (
+                      <img 
+                        src={capaPreview || capaVitrineUrl} 
+                        alt="Capa Vitrine" 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      />
+                    ) : (
+                      <span style={{ fontSize: '10px', color: '#64748b', textAlign: 'center', padding: '4px' }}>
+                        Sem Capa
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <label 
+                  htmlFor="capa-upload" 
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '16px',
+                    border: '2px dashed #3b82f6',
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                    cursor: 'pointer',
+                    textAlign: 'center'
+                  }}
+                >
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#60a5fa' }}>
+                    {capaFile ? capaFile.name : 'Clique para selecionar a imagem de capa'}
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                    Recomendado: 1200x630 pixels (Horizontal)
+                  </span>
+
+                  <input 
+                    id="capa-upload"
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleCapaChange} 
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+            </div>
+
           </div>
         </div>
 

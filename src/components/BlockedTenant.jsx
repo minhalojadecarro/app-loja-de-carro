@@ -1,4 +1,3 @@
-import React from 'react';
 import Planos from './Planos';
 
 export default function BlockedTenant({ tenant, onLogout }) {
