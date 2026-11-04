@@ -9,6 +9,10 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
   const [nomeLoja, setNomeLoja] = useState(tenant?.nome_loja || '');
   const [whatsapp, setWhatsapp] = useState(tenant?.whatsapp || '');
   
+  // Redes Sociais
+  const [instagramUrl, setInstagramUrl] = useState(tenant?.instagram_url || '');
+  const [facebookUrl, setFacebookUrl] = useState(tenant?.facebook_url || '');
+  
   // Logos, Fotos e Capa da Vitrine
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -44,9 +48,11 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
         .maybeSingle();
 
       if (tenantData && !error) {
-        setTenantId(tenantData.id); // Captura o ID real e único desta loja
+        setTenantId(tenantData.id);
         setNomeLoja(tenantData.nome_loja || '');
         setWhatsapp(tenantData.whatsapp || '');
+        setInstagramUrl(tenantData.instagram_url || '');
+        setFacebookUrl(tenantData.facebook_url || '');
         setLogoUrl(tenantData.logo_url || '');
         setFotoPerfilUrl(tenantData.foto_perfil_url || '');
         setCapaVitrineUrl(tenantData.capa_vitrine_url || '');
@@ -141,7 +147,7 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
         novaFotoUrl = publicUrlData.publicUrl;
       }
 
-      // 3. Upload da Capa da Vitrine para Redes Sociais se alterada
+      // 3. Upload da Capa da Vitrine se alterada
       if (capaFile) {
         const fileExt = capaFile.name.split('.').pop();
         const fileName = `capa-vitrine-${tenantId}-${Date.now()}.${fileExt}`;
@@ -160,10 +166,12 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
 
       const dadosParaAtualizar = {
         nome_loja: nomeLoja,
+        whatsapp: whatsapp,
+        instagram_url: instagramUrl,
+        facebook_url: facebookUrl,
         logo_url: novaLogoUrl,
         foto_perfil_url: novaFotoUrl,
         capa_vitrine_url: novaCapaUrl,
-        whatsapp: whatsapp,
         banco: banco,
         agencia: agencia,
         conta_corrente: contaCorrente,
@@ -172,7 +180,7 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
         titular_conta: titularConta
       };
 
-      // 4. ATUALIZAÇÃO SEGURA: Utiliza simultaneamente o id da loja E o user_id para isolamento absoluto
+      // 4. ATUALIZAÇÃO SEGURA
       const { data: tenantUpdatedData, error: tenantError } = await supabase
         .from('tenants')
         .update(dadosParaAtualizar)
@@ -335,6 +343,51 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
               />
             </div>
 
+            {/* --- REDES SOCIAIS (NOVO) --- */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#ccc' }}>
+                  Link do Instagram:
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="https://instagram.com/sualoja"
+                  value={instagramUrl} 
+                  onChange={(e) => setInstagramUrl(e.target.value)} 
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    borderRadius: '6px', 
+                    border: '1px solid #334155', 
+                    backgroundColor: '#020617', 
+                    color: '#fff',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#ccc' }}>
+                  Link do Facebook:
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="https://facebook.com/sualoja"
+                  value={facebookUrl} 
+                  onChange={(e) => setFacebookUrl(e.target.value)} 
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    borderRadius: '6px', 
+                    border: '1px solid #334155', 
+                    backgroundColor: '#020617', 
+                    color: '#fff',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+            </div>
+
             {/* UPLOAD DA LOGO */}
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#ccc' }}>
@@ -402,7 +455,7 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
               </div>
             </div>
 
-            {/* --- UPLOAD DA CAPA DA VITRINE (REDES SOCIAIS / OG IMAGE) --- */}
+            {/* --- UPLOAD DA CAPA DA VITRINE --- */}
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#ccc' }}>
                 Imagem de Capa para Redes Sociais (Facebook / WhatsApp):

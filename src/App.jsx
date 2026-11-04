@@ -13,6 +13,11 @@ function AppContent() {
   const [adminLogo, setAdminLogo] = useState(null);
   const [adminNome, setAdminNome] = useState('Minha Loja de Carro');
   const [adminCapaOG, setAdminCapaOG] = useState('https://motyshnlombyzidqhjgk.supabase.co/storage/v1/object/public/veiculos-fotos/1793455032740_14zpk9g933q.jpg'); // <--- Estado para a capa dinâmica do Admin
+  
+  // Estados para as redes sociais globais do admin no rodapé
+  const [adminInstagram, setAdminInstagram] = useState('https://instagram.com/minhalojadecarro');
+  const [adminFacebook, setAdminFacebook] = useState('');
+
   const [selectedStore, setSelectedStore] = useState(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   
@@ -85,11 +90,11 @@ function AppContent() {
   };
 
   useEffect(() => {
-    // BUSCA EXCLUSIVA DO ADMINISTRADOR RAIZ (is_admin = true) - Incluindo capa de vitrine/OG
+    // BUSCA EXCLUSIVA DO ADMINISTRADOR RAIZ (is_admin = true) - Incluindo capa, nome, logo e redes sociais
     const fetchAdminMaster = async () => {
       const { data: adminData, error } = await supabase
         .from('tenants')
-        .select('logo_url, nome_loja, capa_vitrine_url')
+        .select('logo_url, nome_loja, capa_vitrine_url, instagram_url, facebook_url')
         .eq('is_admin', true)
         .maybeSingle();
 
@@ -97,6 +102,8 @@ function AppContent() {
         if (adminData.logo_url) setAdminLogo(adminData.logo_url);
         if (adminData.nome_loja) setAdminNome(adminData.nome_loja);
         if (adminData.capa_vitrine_url) setAdminCapaOG(adminData.capa_vitrine_url);
+        if (adminData.instagram_url) setAdminInstagram(adminData.instagram_url);
+        if (adminData.facebook_url) setAdminFacebook(adminData.facebook_url);
       }
     };
 
@@ -190,6 +197,10 @@ function AppContent() {
   const isSobreActive = currentPath === '/sobre';
   const isPlanosActive = currentPath === '/planos';
 
+  // URLs finais ativas no rodapé (se for lojista logado usa o dele, senão usa o do Admin)
+  const instagramAtivo = (!session || isAdmin) ? adminInstagram : (tenantData?.instagram_url || adminInstagram);
+  const facebookAtivo = (!session || isAdmin) ? adminFacebook : (tenantData?.facebook_url || adminFacebook);
+
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col font-sans">
       {/* INJEÇÃO DINÂMICA DE METADADOS OPEN GRAPH / SEO */}
@@ -236,7 +247,6 @@ function AppContent() {
 
           {/* MENUS DE NAVEGAÇÃO (DESKTOP) */}
           <nav className="hidden md:flex items-center gap-4">
-            {/* Se o usuário estiver logado e NÃO for admin, o botão Home vira "Painel" */}
             {session && !isAdmin ? (
               <Link
                 to="/painel-lojista"
@@ -245,7 +255,6 @@ function AppContent() {
                 Painel
               </Link>
             ) : (
-              /* Para visitantes ou para o Administrador, o botão Home aponta para a raiz pública */
               <Link
                 to={isAdmin ? "/home-publica" : "/"}
                 className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
@@ -256,7 +265,6 @@ function AppContent() {
               </Link>
             )}
 
-            {/* Se for Administrador, adicionamos um botão rápido "Painel" logo no menu principal */}
             {session && isAdmin && (
               <Link
                 to="/painel-lojista"
@@ -550,9 +558,38 @@ function AppContent() {
             <p>© {new Date().getFullYear()} Minha Loja de Carro. Todos os direitos reservados.</p>
           </div>
 
-          <div className="flex items-center gap-6">
-            <Link to="/sobre" className="hover:text-white transition">Sobre</Link>
-            <Link to="/planos" className="hover:text-white transition">Planos</Link>
+          {/* REDES SOCIAIS E LINKS INSTITUCIONAIS */}
+          <div className="flex items-center gap-4">
+            {instagramAtivo && (
+              <a 
+                href={instagramAtivo} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="p-2 bg-slate-900 hover:bg-slate-800 text-gray-300 hover:text-pink-400 rounded-full transition border border-slate-800"
+                title="Instagram"
+              >
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                </svg>
+              </a>
+            )}
+
+            {facebookAtivo && (
+              <a 
+                href={facebookAtivo} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="p-2 bg-slate-900 hover:bg-slate-800 text-gray-300 hover:text-blue-400 rounded-full transition border border-slate-800"
+                title="Facebook"
+              >
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M9 8H6v4h3v12h5V12h3.642L18 8h-4V6.333C14 5.37 14.5 5 15.5 5H18V0h-3.808C10.59 0 9 1.581 9 4.75V8z"/>
+                </svg>
+              </a>
+            )}
+
+            <Link to="/sobre" className="hover:text-white transition px-2">Sobre</Link>
+            <Link to="/planos" className="hover:text-white transition px-2">Planos</Link>
           </div>
 
         </div>
