@@ -126,7 +126,7 @@ export default function Auth({ onLoginSuccess }) {
           const newTenant = {
             id: user.id,
             nome: storeName,
-            nome_loja: storeName, // <--- Adicionado para satisfazer a restrição da tabela
+            nome_loja: storeName,
             slug: slug,
             whatsapp: whatsapp,
             tipo_pessoa: tipoPessoa,
@@ -147,7 +147,7 @@ export default function Auth({ onLoginSuccess }) {
 
       } else if (authMode === 'forgot') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin,
+          redirectTo: 'https://minhalojadecarro.com/#/reset-password',
         });
         if (error) throw error;
 

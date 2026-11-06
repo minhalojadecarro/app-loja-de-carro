@@ -864,7 +864,6 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                 <input
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   onChange={handleImageUpload}
                   className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2 text-sm text-gray-300 file:mr-4 file:py-1 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 transition cursor-pointer"
                 />

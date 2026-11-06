@@ -1,5 +1,6 @@
-// src/routes/AppRoutes.jsx
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 
 // Importação das Páginas
 import Home from '../pages/Home';
@@ -14,12 +15,31 @@ import Relatorios from '../pages/Relatorios';
 import Planos from '../components/Planos';
 import Auth from '../components/Auth';
 import Assinatura from '../Assinatura';
-import DashboardFinanceiro from '../pages/DashboardFinanceiro'; // <--- Importando o Dashboard Financeiro
+import DashboardFinanceiro from '../pages/DashboardFinanceiro';
+import ResetPassword from '../pages/ResetPassword';
+import DetalheVeiculo from '../pages/DetalheVeiculo';
 
-export function AppRoutes({ session, tenantData, isAdmin, selectedStore, }) {
+export function AppRoutes({ session, tenantData, isAdmin, selectedStore }) {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        navigate('/reset-password');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [navigate]);
+
   return (
     <Routes>
-      {/* Rota Raiz agora exibe sempre a Home pública de veículos/vitrine geral */}
+      {/* Rota oficial de redefinição de palavra-passe */}
+      <Route path="/reset-password" element={<ResetPassword />} />
+
+      {/* Rota Raiz */}
       <Route 
         path="/" 
         element={
@@ -31,57 +51,61 @@ export function AppRoutes({ session, tenantData, isAdmin, selectedStore, }) {
         } 
       />
       
-      {/* Rota de Login: Redireciona para o painel de veículos se já estiver logado */}
+      {/* Rota de Login */}
       <Route 
         path="/login" 
         element={session ? <Navigate to="/" replace /> : <Auth />} 
       />
 
-      {/* Rota dedicada para forçar a visualização da Home Pública */}
+      {/* Rota Home Pública */}
       <Route 
         path="/home-publica" 
         element={
           <Home 
-            session={null} /* Força o componente a se comportar como deslogado/público */
+            session={null} 
             tenant={null} 
             isAdmin={false} 
           />
         } 
       />
+
+      {/* 1. OBRIGATÓRIO: A rota específica do veículo vem ANTES da rota genérica do slug */}
+      <Route 
+        path="/:slug/veiculo/:id" 
+        element={<DetalheVeiculo />} 
+      />
+
+      {/* 2. DEPOIS: A rota geral da vitrine por slug */}
+      <Route 
+        path="/:slug" 
+        element={<VitrinePublicaSlug />} 
+      />
       
-      {/* Rota correta para o painel de gestão do lojista (HomeLogistas.jsx) */}
+      {/* Painel do Lojista */}
       <Route 
         path="/painel-lojista" 
         element={<HomeLogistas session={session} tenant={tenantData} />} 
-      />    
+      />
+      
       <Route path="/sobre" element={<Sobre />} />
       <Route path="/planos" element={<Planos tenant={tenantData} session={session} />} />
 
-      {/* Rotas Internas / Gestão (Lojista / Admin) */}
+      {/* Gestão de Veículos */}
       <Route path="/veiculos" element={<Veiculos session={session} tenant={tenantData} isAdmin={isAdmin} />} />
       <Route path="/estoque" element={<Veiculos session={session} tenant={tenantData} isAdmin={isAdmin} />} />
-      
-      {/* Painel de gestão exclusiva do lojista (Gerenciar Estoque / Filtros) */}
-      <Route path="/painel-lojista" element={<HomeLogistas session={session} tenant={tenantData} />} />
 
       <Route path="/vitrines" element={<Vitrines session={session} tenant={tenantData} isAdmin={isAdmin} selectedStore={selectedStore} />} />
       <Route path="/relatorios" element={<Relatorios session={session} tenant={tenantData} />} />
       <Route path="/configuracoes" element={<Configuracoes session={session} tenant={tenantData} />} />
       <Route path="/assinaturas" element={<Assinatura />} />
       
-      {/* NOVA ROTA: Dashboard Financeiro do Administrador (SaaS) */}
+      {/* Dashboard Financeiro */}
       <Route 
         path="/dashboard-financeiro" 
         element={<DashboardFinanceiro session={session} tenant={tenantData} isAdmin={isAdmin} />} 
       />
 
       <Route path="/lojas" element={<Lojas />} />
-
-      {/* Rota Pública Oficial: Carrega a Vitrine do Lojista via Slug (ex: /#/carro-barato) */}
-      <Route 
-        path="/:slug" 
-        element={<VitrinePublicaSlug />} 
-      />
     </Routes>
   );
 }

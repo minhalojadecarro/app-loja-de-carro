@@ -285,13 +285,21 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
                 Recomendado: Imagem quadrada (PNG ou JPG)
               </span>
 
-              <input 
-                id="foto-upload"
-                type="file" 
-                accept="image/*" 
-                onChange={handleFotoChange} 
-                style={{ display: 'none' }}
-              />
+              <div className="relative overflow-hidden inline-block">
+                {/* Botão visual customizado que o usuário vê */}
+                <button type="button" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg">
+                  Selecionar Foto ou Abrir Galeria
+                </button>
+
+                {/* Input real invisível por cima do botão, permitindo o toque direto do usuário */}
+                <input 
+                  id="foto-upload"
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleFotoChange} 
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+              </div>
             </label>
           </div>
         </div>
