@@ -222,55 +222,110 @@ export default function HomeLogistas({ session, tenant }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {veiculosFiltrados.map((veiculo) => (
-            <div key={veiculo.id} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-xl flex flex-col justify-between hover:border-gray-700 transition">
-              <div>
-                <div className="h-48 bg-gray-950 relative">
-                  {veiculo.foto_principal_url ? (
-                    <img src={veiculo.foto_principal_url} alt={veiculo.modelo} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs text-gray-600">Sem foto</div>
-                  )}
-                  <span className="absolute top-3 left-3 bg-blue-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
-                    {nomeLojaAtual}
-                  </span>
-                  {(veiculo.destaque_home || veiculo.destaque) && (
-                    <span className="absolute top-3 right-3 bg-amber-500 text-gray-950 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
-                      ★ Destaque
-                    </span>
-                  )}
-                </div>
+          {veiculosFiltrados.map((veiculo) => {
+            const temFinanciamento = veiculo.tipo_financiamento && veiculo.tipo_financiamento !== 'nenhum' && Number(veiculo.valor_parcela) > 0;
 
-                <div className="p-6">
-                  <span className="text-xs text-gray-400 bg-gray-800 px-2.5 py-1 rounded font-medium">
-                    {veiculo.ano_modelo || veiculo.ano_fabricacao} {veiculo.combustivel ? `• ${veiculo.combustivel}` : ''} {veiculo.cambio ? `• ${veiculo.cambio}` : ''}
-                  </span>
-                  <h3 className="text-lg font-bold text-white mt-3">
-                    {veiculo.marca} {veiculo.modelo}
-                  </h3>
-                  <p className="text-xs text-gray-400 mt-1">{veiculo.versao}</p>
-
-                  <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between">
-                    <span className="text-xl font-black text-green-400">
-                      {Number(veiculo.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            return (
+              <div key={veiculo.id} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-xl flex flex-col justify-between hover:border-gray-700 transition">
+                <div>
+                  <div className="h-48 bg-gray-950 relative">
+                    {veiculo.foto_principal_url ? (
+                      <img src={veiculo.foto_principal_url} alt={veiculo.modelo} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xs text-gray-600">Sem foto</div>
+                    )}
+                    <span className="absolute top-3 left-3 bg-blue-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
+                      {nomeLojaAtual}
                     </span>
-                    {veiculo.quilometragem ? (
-                      <span className="text-xs text-gray-400 font-mono">{veiculo.quilometragem.toLocaleString('pt-BR')} km</span>
-                    ) : null}
+                    {(veiculo.destaque_home || veiculo.destaque) && (
+                      <span className="absolute top-3 right-3 bg-amber-500 text-gray-950 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
+                        ★ Destaque
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-6">
+                    <span className="text-xs text-gray-400 bg-gray-800 px-2.5 py-1 rounded font-medium">
+                      {veiculo.ano_modelo || veiculo.ano_fabricacao} {veiculo.combustivel ? `• ${veiculo.combustivel}` : ''} {veiculo.cambio ? `• ${veiculo.cambio}` : ''}
+                    </span>
+                    <h3 className="text-lg font-bold text-white mt-3">
+                      {veiculo.marca} {veiculo.modelo}
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-1">{veiculo.versao}</p>
+
+                    {/* Valores: Condição de Financiamento em Destaque ou Preço à Vista */}
+                    <div className="pt-3">
+                      {temFinanciamento ? (
+                        <div className="space-y-1.5 bg-gray-950/60 p-3 rounded-xl border border-gray-800/80">
+                          <div>
+                            <span className={`text-[10px] font-bold block uppercase tracking-wider ${veiculo.tipo_financiamento === 'bancario' ? 'text-blue-400' : 'text-amber-400'}`}>
+                              {veiculo.tipo_financiamento === 'bancario'
+                                ? '🏦 Financiamento Bancário'
+                                : '🔥 Financiamento Próprio • Sem SPC/Serasa'}
+                            </span>
+                            <div className="flex items-baseline gap-1.5 mt-0.5">
+                              <span className="text-lg font-black text-green-400">
+                                {Number(veiculo.valor_entrada || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </span>
+                              <span className="text-xs text-gray-400">+</span>
+                              <span className="text-base font-extrabold text-white">
+                                {veiculo.num_parcelas || 48}x {Number(veiculo.valor_parcela).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-baseline justify-between pt-1 border-t border-gray-800/50 text-[11px]">
+                            <span className="text-gray-400">
+                              À vista: <strong className="text-gray-200">{Number(veiculo.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                            </span>
+                            {veiculo.valorfipe && (
+                              <span className="text-gray-400">
+                                FIPE: <strong className="text-gray-300">{Number(veiculo.valorfipe).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-right pt-0.5">
+                            <span className="text-[9px] text-amber-500/90 italic">*Sujeito a análise</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-baseline justify-between">
+                          <div>
+                            <span className="text-[10px] text-gray-400 block uppercase tracking-wider">Valor à Vista</span>
+                            <span className="text-xl font-black text-green-400">
+                              {Number(veiculo.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                          {veiculo.valorfipe && (
+                            <div className="text-right">
+                              <span className="text-[10px] text-gray-400 block uppercase tracking-wider">FIPE</span>
+                              <span className="text-sm font-bold text-gray-300">
+                                {Number(veiculo.valorfipe).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="p-6 pt-0">
-                <Link
-                  to={`/estoque`}
-                  className="w-full text-center block bg-gray-800 hover:bg-gray-700 text-white font-semibold text-xs py-3 rounded-xl transition"
-                >
-                  Gerenciar no Estoque
-                </Link>
+                <div className="p-6 pt-0 space-y-2">
+                  <div className="py-2 bg-gray-950/60 px-4 rounded-xl border border-gray-800/60 text-xs text-gray-400 flex justify-between items-center mb-2">
+                    <span>Cor: <strong className="text-gray-200">{veiculo.cor || 'N/I'}</strong></span>
+                    <span>KM: <strong className="text-gray-200">{veiculo.quilometragem ? veiculo.quilometragem.toLocaleString('pt-BR') : '0'}</strong></span>
+                  </div>
+                  <Link
+                    to={`/estoque`}
+                    className="w-full text-center block bg-gray-800 hover:bg-gray-700 text-white font-semibold text-xs py-3 rounded-xl transition"
+                  >
+                    Gerenciar no Estoque
+                  </Link>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

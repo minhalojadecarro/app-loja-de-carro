@@ -11,36 +11,42 @@ export default function ResetPassword() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // 1. Ouve alterações de autenticação (captura o evento de recovery do Supabase)
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsReady(true);
+      }
+    });
+
+    // 2. Fallback caso o usuário venha com tokens direto na URL (hash/query params)
     const handleAuthTokens = async () => {
-      let fullHash = window.location.hash; // ex: #/reset-password#access_token=...
-      
-      // Se a URL contiver um segundo hash com o access_token, normalizamos os tokens
-      if (fullHash.includes('#access_token=')) {
-        const parts = fullHash.split('#access_token=');
-        const tokenParams = new URLSearchParams('access_token=' + parts[1]);
-        const accessToken = tokenParams.get('access_token');
-        const refreshToken = tokenParams.get('refresh_token');
-
-        if (accessToken && refreshToken) {
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (sessionError) {
-            setError(`Erro ao autenticar com o link: ${sessionError.message}`);
-          } else {
-            setIsReady(true);
-            // Limpa a barra de endereços para remover os tokens expostos por segurança
-            window.history.replaceState({}, document.title, window.location.pathname + '#/reset-password');
-            return;
-          }
+      // O Supabase v2 gerencia tokens na URL automaticamente se usar createClient padrão,
+      // mas mantemos a verificação de sessão ativa
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setIsReady(true);
+      } else {
+        // Tenta ler caso venha no formato antigo de hash
+        const fullHash = window.location.hash;
+        if (fullHash.includes('access_token=')) {
+          setIsReady(true);
+        } else {
+          // Se não houver sessão nem token após um breve delay, avisa o usuário
+          setTimeout(() => {
+            if (!isReady) {
+              setError('Link de recuperação inválido ou expirado. Solicite um novo link.');
+            }
+          }, 1500);
         }
       }
     };
 
     handleAuthTokens();
-  }, []);
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [isReady]);
 
   const handleReset = async (e) => {
     e.preventDefault();
@@ -80,28 +86,35 @@ export default function ResetPassword() {
           </div>
         )}
 
-        <form onSubmit={handleReset} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Nova Senha</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Digite a nova senha"
-              required
-              minLength={6}
-              className="w-full p-3 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
-            />
+        {/* Mostra o formulário apenas se estiver pronto/autenticado para redefinir */}
+        {!isReady && !error ? (
+          <div className="text-center py-6 text-gray-400 animate-pulse text-sm">
+            Validando link de recuperação...
           </div>
+        ) : (
+          <form onSubmit={handleReset} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Nova Senha</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Digite a nova senha"
+                required
+                minLength={6}
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 font-semibold rounded transition duration-200 disabled:opacity-50"
-          >
-            {loading ? 'Atualizando...' : 'Atualizar Senha'}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 font-semibold rounded transition duration-200 disabled:opacity-50 cursor-pointer"
+            >
+              {loading ? 'Atualizando...' : 'Atualizar Senha'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

@@ -82,9 +82,15 @@ export default function VitrinePublicaSlug({ session }) {
     }
   }, [slug]);
 
-  // Função de Compartilhamento Inteligente no mesmo padrão da Home raiz
+  // Função de Compartilhamento Inteligente com URL Blindada
   const handleShareVeiculo = async (carro, nomeLoja) => {
-    const urlVeiculo = window.location.href;
+    const slugReal = tenant?.slug || slug;
+    const baseUrl = window.location.origin;
+    
+    const urlVeiculo = (slugReal && slugReal !== 'minhalojadecarro')
+      ? `${baseUrl}/${slugReal}/veiculo/${carro.id}`
+      : `${baseUrl}/veiculo/${carro.id}`;
+
     const titulo = `${carro.marca} ${carro.modelo} (${carro.ano_modelo || carro.ano_fabricacao})`;
     const precoFormatado = Number(carro.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const texto = `Confira este ${titulo} por ${precoFormatado} na ${nomeLoja}! Veja mais detalhes aqui:`;
@@ -123,13 +129,15 @@ export default function VitrinePublicaSlug({ session }) {
 
     if (navigator.clipboard && window.isSecureContext) {
       try {
-        await navigator.clipboard.writeText(urlVeiculo);
-        alert('Link do veículo copiado para a área de transferência!');
+        await navigator.clipboard.writeText(`${texto} ${urlVeiculo}`);
+        alert('Link do veículo e legenda copiados para a área de transferência!');
         return;
       } catch (err) {
         console.warn('Erro ao copiar link:', err);
       }
     }
+
+    alert(`Copie o link do veículo: ${urlVeiculo}`);
   };
 
   if (loading) {
@@ -151,8 +159,6 @@ export default function VitrinePublicaSlug({ session }) {
 
   const nomeLojaExibicao = tenant?.nome || tenant?.name || tenant?.nome_loja || 'Minha Loja de Carro';
   const urlAtualCompleta = window.location.href;
-  const imagemCapaPadrao = "https://motyshnlombyzidhqhjgk.supabase.co/storage/v1/object/public/veiculos-fotos/1791554491753_tup6bx9wbn.jpg";
-  const imagemCapaLoja = tenant?.capa_vitrine_url || imagemCapaPadrao;
   const tituloVitrineMeta = `${nomeLojaExibicao} | Estoque de Veículos`;
   const descricaoVitrineMeta = `Confira o estoque atualizado de carros e motos da revenda ${nomeLojaExibicao}. As melhores ofertas estão aqui!`;
   const whatsappLoja = tenant?.whatsapp ? String(tenant.whatsapp).replace(/\D/g, '') : '5592991701002';
@@ -165,13 +171,11 @@ export default function VitrinePublicaSlug({ session }) {
         <meta property="og:url" content={urlAtualCompleta} />
         <meta property="og:title" content={tituloVitrineMeta} />
         <meta property="og:description" content={descricaoVitrineMeta} />
-        <meta property="og:image" content={imagemCapaLoja} />
 
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:url" content={urlAtualCompleta} />
         <meta name="twitter:title" content={tituloVitrineMeta} />
         <meta name="twitter:description" content={descricaoVitrineMeta} />
-        <meta name="twitter:image" content={imagemCapaLoja} />
       </Helmet>
 
       <div className="max-w-7xl mx-auto">
@@ -194,6 +198,7 @@ export default function VitrinePublicaSlug({ session }) {
             {veiculos.map((veiculo) => {
               const mensagemWp = encodeURIComponent(`Olá! Vi o anúncio do ${veiculo.marca} ${veiculo.modelo} (${veiculo.ano_modelo || veiculo.ano_fabricacao}) na vitrine da ${nomeLojaExibicao} e gostaria de mais informações.`);
               const emDestaque = veiculo.status_destaque === 'em_evidencia';
+              const temFinanciamento = veiculo.tipo_financiamento && veiculo.tipo_financiamento !== 'nenhum' && Number(veiculo.valor_parcela) > 0;
 
               return (
                 <div 
@@ -229,7 +234,7 @@ export default function VitrinePublicaSlug({ session }) {
                     {/* Informações do Veículo */}
                     <div className="p-6 space-y-4">
                       <div className="text-xs text-gray-400 font-medium">
-                        {veiculo.ano_modelo || veiculo.ano_fabricacao} - {veiculo.combustivel || 'Flex'}
+                        {veiculo.ano_modelo || veiculo.ano_fabricacao} • {veiculo.combustivel || 'Flex'}
                       </div>
 
                       <div>
@@ -241,20 +246,60 @@ export default function VitrinePublicaSlug({ session }) {
                         </p>
                       </div>
 
-                      {/* Valores: Preço de Venda e Tabela FIPE lado a lado */}
-                      <div className="flex items-baseline justify-between pt-2">
-                        <div>
-                          <span className="text-[10px] text-gray-400 block uppercase tracking-wider">Valor</span>
-                          <span className="text-xl font-black text-green-400">
-                            {Number(veiculo.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                          </span>
-                        </div>
-                        {veiculo.valorfipe && (
-                          <div className="text-right">
-                            <span className="text-[10px] text-gray-400 block uppercase tracking-wider">FIPE</span>
-                            <span className="text-sm font-bold text-gray-300">
-                              {Number(veiculo.valorfipe).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
+                      {/* Valores: Condição de Financiamento em Destaque ou Preço à Vista */}
+                      <div className="pt-1">
+                        {temFinanciamento ? (
+                          <div className="space-y-1.5 bg-gray-950/60 p-3 rounded-xl border border-gray-800/80">
+                            <div className="flex items-baseline justify-between">
+                              <div>
+                                <span className={`text-[10px] font-bold block uppercase tracking-wider ${veiculo.tipo_financiamento === 'bancario' ? 'text-blue-400' : 'text-amber-400'}`}>
+                                  {veiculo.tipo_financiamento === 'bancario'
+                                    ? '🏦 Financiamento Bancário'
+                                    : '🔥 Financiamento Próprio • Sem SPC/Serasa'}
+                                </span>
+                                <div className="flex items-baseline gap-1.5 mt-0.5">
+                                  <span className="text-lg font-black text-green-400">
+                                    {Number(veiculo.valor_entrada || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                  </span>
+                                  <span className="text-xs text-gray-400">+</span>
+                                  <span className="text-base font-extrabold text-white">
+                                    {veiculo.num_parcelas || 48}x {Number(veiculo.valor_parcela).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-baseline justify-between pt-1 border-t border-gray-800/50 text-[11px]">
+                              <span className="text-gray-400">
+                                À vista: <strong className="text-gray-200">{Number(veiculo.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                              </span>
+                              {veiculo.valorfipe && (
+                                <span className="text-gray-400">
+                                  FIPE: <strong className="text-gray-300">{Number(veiculo.valorfipe).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-right pt-0.5">
+                              <span className="text-[9px] text-amber-500/90 italic">*Sujeito a análise</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-baseline justify-between">
+                            <div>
+                              <span className="text-[10px] text-gray-400 block uppercase tracking-wider">Valor à Vista</span>
+                              <span className="text-xl font-black text-green-400">
+                                {Number(veiculo.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </span>
+                            </div>
+                            {veiculo.valorfipe && (
+                              <div className="text-right">
+                                <span className="text-[10px] text-gray-400 block uppercase tracking-wider">FIPE</span>
+                                <span className="text-sm font-bold text-gray-300">
+                                  {Number(veiculo.valorfipe).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

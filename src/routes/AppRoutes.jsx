@@ -69,6 +69,12 @@ export function AppRoutes({ session, tenantData, isAdmin, selectedStore }) {
         } 
       />
 
+      {/* === ADICIONE ESTA ROTA DIRETA PARA FUNCIONAR SEM SLUG === */}
+      <Route 
+        path="/veiculo/:id" 
+        element={<DetalheVeiculo />} 
+      />
+
       {/* 1. OBRIGATÓRIO: A rota específica do veículo vem ANTES da rota genérica do slug */}
       <Route 
         path="/:slug/veiculo/:id" 

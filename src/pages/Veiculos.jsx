@@ -41,6 +41,12 @@ export default function Veiculos({ session, tenant, isAdmin }) {
   const [fotoUrl, setFotoUrl] = useState('');
   const [destaqueHome, setDestaqueHome] = useState(false);
 
+  // --- NOVOS ESTADOS DE FINANCIAMENTO ---
+  const [tipoFinanciamento, setTipoFinanciamento] = useState('nenhum'); // 'nenhum', 'bancario', 'proprio'
+  const [valorEntradaFormatado, setValorEntradaFormatado] = useState('');
+  const [numParcelas, setNumParcelas] = useState(48);
+  const [valorParcelaFormatado, setValorParcelaFormatado] = useState('');
+
   // Estado para armazenar o valor FIPE obtido da API
   const [valorFipeApi, setValorFipeApi] = useState(0);
 
@@ -71,10 +77,8 @@ export default function Veiculos({ session, tenant, isAdmin }) {
       }
     }
 
-    // Segmento baseado no tipo atual
     const segmentoApi = tipoItem === 'moto' ? 'motos' : 'carros';
 
-    // Busca inicial de marcas com base no tipo atual
     try {
       const res = await fetch(`https://parallelum.com.br/fipe/api/v1/${segmentoApi}/marcas`);
       const data = await res.json();
@@ -109,7 +113,6 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     setLoading(false);
   }, [eAdministrador, meuTenantId, tenantId, tipoItem]);
 
-  // Executa o fetch de forma assíncrona desacoplada para evitar o aviso de setState síncrono no effect
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchData();
@@ -117,7 +120,6 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     return () => clearTimeout(timer);
   }, [fetchData]);
 
-  // Função para alternar entre Carro e Moto no formulário
   const handleTipoItemChange = async (novoTipo) => {
     setTipoItem(novoTipo);
     setMarcaObj({ id: '', name: '' });
@@ -153,6 +155,32 @@ export default function Veiculos({ session, tenant, isAdmin }) {
       maximumFractionDigits: 2
     });
     setPrecoFormatado(valor);
+  };
+
+  const handleValorEntradaChange = (e) => {
+    let valor = e.target.value.replace(/\D/g, '');
+    if (!valor) {
+      setValorEntradaFormatado('');
+      return;
+    }
+    valor = (Number(valor) / 100).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    setValorEntradaFormatado(valor);
+  };
+
+  const handleValorParcelaChange = (e) => {
+    let valor = e.target.value.replace(/\D/g, '');
+    if (!valor) {
+      setValorParcelaFormatado('');
+      return;
+    }
+    valor = (Number(valor) / 100).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    setValorParcelaFormatado(valor);
   };
 
   const handleKmChange = (e) => {
@@ -195,7 +223,6 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     }
   };
 
-  // Função auxiliar para definir o segmento correto na URL da API FIPE
   const getApiSegmento = () => (tipoItem === 'moto' ? 'motos' : 'carros');
 
   const handleMarcaChange = async (e) => {
@@ -297,6 +324,12 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     setCombustivel(veiculo.combustivel || '');
     setValorFipeApi(veiculo.valorfipe || 0);
     
+    // --- CARREGAR DADOS DE FINANCIAMENTO ---
+    setTipoFinanciamento(veiculo.tipo_financiamento || 'nenhum');
+    setValorEntradaFormatado(veiculo.valor_entrada ? Number(veiculo.valor_entrada).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '');
+    setNumParcelas(veiculo.num_parcelas || 48);
+    setValorParcelaFormatado(veiculo.valor_parcela ? Number(veiculo.valor_parcela).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '');
+
     try {
       const res = await fetch(`https://parallelum.com.br/fipe/api/v1/${tipoSalvo === 'moto' ? 'motos' : 'carros'}/marcas`);
       const data = await res.json();
@@ -382,6 +415,10 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     setFotoUrl('');
     setDestaqueHome(false);
     setValorFipeApi(0);
+    setTipoFinanciamento('nenhum');
+    setValorEntradaFormatado('');
+    setNumParcelas(48);
+    setValorParcelaFormatado('');
     setShowCadastroModal(false);
   };
 
@@ -421,6 +458,10 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     const anoNumerico = parseInt(anoObj.name) || new Date().getFullYear();
     const precoNumerico = parseFloat(precoFormatado.replace(/\./g, '').replace(',', '.')) || 0;
     const kmNumerico = parseInt(kmFormatado.replace(/\./g, '')) || 0;
+    
+    // --- TRATAMENTO DOS DADOS DE FINANCIAMENTO ---
+    const entradaNumerica = tipoFinanciamento !== 'nenhum' ? (parseFloat(valorEntradaFormatado.replace(/\./g, '').replace(',', '.')) || 0) : 0;
+    const parcelaNumerica = tipoFinanciamento !== 'nenhum' ? (parseFloat(valorParcelaFormatado.replace(/\./g, '').replace(',', '.')) || 0) : 0;
 
     const dadosVeiculo = {
       tenant_id: idTenantFinal,
@@ -440,7 +481,12 @@ export default function Veiculos({ session, tenant, isAdmin }) {
       status_destaque: destaqueHome ? 'em_evidencia' : 'normal',
       data_inicio_destaque: destaqueHome ? new Date().toISOString() : null,
       data_fim_destaque: destaqueHome ? new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString() : null,
-      status: 'Disponível'
+      status: 'Disponível',
+      // Campos de Financiamento
+      tipo_financiamento: tipoFinanciamento,
+      valor_entrada: entradaNumerica,
+      num_parcelas: Number(numParcelas),
+      valor_parcela: parcelaNumerica
     };
 
     if (editingId) {
@@ -490,7 +536,6 @@ export default function Veiculos({ session, tenant, isAdmin }) {
     fetchData();
   };
 
-  // --- LÓGICA DE FILTRAGEM DO ESTOQUE ---
   const veiculosFiltrados = veiculos.filter((v) => {
     const termoBusca = filtroBusca.toLowerCase();
     const textoVeiculo = `${v.marca || ''} ${v.modelo || ''} ${v.versao || ''}`.toLowerCase();
@@ -840,6 +885,70 @@ export default function Veiculos({ session, tenant, isAdmin }) {
                   <option value="CVT">CVT</option>
                   <option value="Semi-automática">Semi-automática</option>
                 </select>
+              </div>
+
+              {/* --- SEÇÃO DE OPÇÕES DE FINANCIAMENTO --- */}
+              <div className="md:col-span-2 bg-gray-900 border border-gray-800 p-4 rounded-xl space-y-4">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">💳 Condições e Opções de Financiamento</h3>
+                  <p className="text-[11px] text-gray-400">Configure simulações de financiamento bancário ou crediário próprio para destacar no anúncio.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-3">
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">Tipo de Financiamento</label>
+                    <select
+                      value={tipoFinanciamento}
+                      onChange={(e) => setTipoFinanciamento(e.target.value)}
+                      className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-600 cursor-pointer text-sm"
+                    >
+                      <option value="nenhum">Não exibir financiamento (Apenas preço à vista)</option>
+                      <option value="bancario">Financiamento Bancário (Simulação com análise)</option>
+                      <option value="proprio">Financiamento Próprio (Crediário da loja - Sem SPC/Serasa)</option>
+                    </select>
+                  </div>
+
+                  {tipoFinanciamento !== 'nenhum' && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-300 mb-1">Valor da Entrada (R$)</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: 10.000,00"
+                          value={valorEntradaFormatado}
+                          onChange={handleValorEntradaChange}
+                          className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2 text-white placeholder-gray-600 font-mono text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-300 mb-1">Número de Parcelas</label>
+                        <select
+                          value={numParcelas}
+                          onChange={(e) => setNumParcelas(Number(e.target.value))}
+                          className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2 text-white cursor-pointer text-sm"
+                        >
+                          <option value={12}>12x</option>
+                          <option value={24}>24x</option>
+                          <option value={36}>36x</option>
+                          <option value={48}>48x (Padrão)</option>
+                          <option value={60}>60x</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-300 mb-1">Valor da Parcela (R$)</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: 1.250,00"
+                          value={valorParcelaFormatado}
+                          onChange={handleValorParcelaChange}
+                          className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2 text-white placeholder-gray-600 font-mono text-sm"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="md:col-span-2 flex items-center bg-gray-950 border border-gray-800 rounded-lg px-4 py-3">

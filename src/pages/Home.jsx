@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Link, useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import HomeLogistas from './HomeLogistas';
 
 export default function Home({ session, tenant, adminLogo }) {
@@ -11,10 +12,16 @@ export default function Home({ session, tenant, adminLogo }) {
   const [copiado, setCopiado] = useState(false);
   const [, setLogoRaizAdmin] = useState(adminLogo || '');
   
+  // Estado para armazenar a capa da vitrine oficial do Administrador
+  const [capaVitrineAdmin, setCapaVitrineAdmin] = useState('');
+
   // Estados para as redes sociais e contato do Admin na Home principal
   const [adminInstagram, setAdminInstagram] = useState('https://instagram.com/minhalojadecarro');
   const [adminFacebook, setAdminFacebook] = useState('');
-  const [adminWhatsapp, setAdminWhatsapp] = useState('5592991701002');
+  const [adminwhatsapp, setAdminwhatsapp] = useState('5592991701002');
+
+  // Variável limpa computada logo abaixo dos estados
+  const cleanAdminwhatsapp = `https://wa.me/${adminwhatsapp.replace(/\D/g, '')}?text=Olá,%20vim%20pelo%20site%20Minha%20Loja%20de%20Carro!`;
 
   // Verificação de permissão de Administrador
   const isAdmin = Boolean(
@@ -25,12 +32,12 @@ export default function Home({ session, tenant, adminLogo }) {
     )
   );
 
-  // Busca isolada da logo e redes sociais/WhatsApp oficiais do Administrador (is_admin = true)
+  // Busca isolada da logo, capa de vitrine e redes sociais/WhatsApp oficiais do Administrador (is_admin = true)
   useEffect(() => {
     const fetchAdminMasterInfo = async () => {
       const { data, error } = await supabase
         .from('tenants')
-        .select('logo_url, instagram_url, facebook_url, whatsapp')
+        .select('logo_url, capa_vitrine_url, instagram_url, facebook_url, whatsapp')
         .eq('is_admin', true)
         .maybeSingle();
 
@@ -39,19 +46,68 @@ export default function Home({ session, tenant, adminLogo }) {
           setLogoRaizAdmin(data.logo_url);
           localStorage.setItem('admin_logo_cache', data.logo_url);
         }
+        if (data.capa_vitrine_url) {
+          setCapaVitrineAdmin(data.capa_vitrine_url);
+        }
         if (data.instagram_url) setAdminInstagram(data.instagram_url);
         if (data.facebook_url) setAdminFacebook(data.facebook_url);
-        if (data.whatsapp) setAdminWhatsapp(data.whatsapp);
+        if (data.whatsapp) setAdminwhatsapp(data.whatsapp);
       }
     };
 
     fetchAdminMasterInfo();
   }, [adminLogo]);
 
+  // BUSCA DOS VEÍCULOS EM DESTAQUE
+  useEffect(() => {
+    const fetchDestaques = async () => {
+      setLoadingDestaques(true);
+
+      const { data, error } = await supabase
+        .from('veiculos')
+        .select(`
+          *,
+          tenants (
+            id,
+            nome_loja,
+            slug,
+            whatsapp
+          )
+        `)
+        .eq('status_destaque', 'em_evidencia')
+        .neq('status', 'Vendido')
+        .order('data_inicio_destaque', { ascending: true })
+        .limit(6);
+
+      if (error) {
+        console.error('Erro ao buscar destaques:', error);
+        setVeiculosDestaque([]);
+        setLoadingDestaques(false);
+        return;
+      }
+
+      const veiculosFormatados = (data || []).map(carro => {
+        const loja = Array.isArray(carro.tenants) ? carro.tenants[0] : carro.tenants;
+
+        return {
+          ...carro,
+          lojaNome: loja?.nome_loja ? String(loja.nome_loja).trim() : 'Revenda Parceira',
+          lojaSlug: loja?.slug ? String(loja.slug).trim() : carro.tenant_id,
+          lojaWhatsapp: loja?.whatsapp ? String(loja.whatsapp).replace(/\D/g, '') : ''
+        };
+      });
+
+      setVeiculosDestaque(veiculosFormatados);
+      setLoadingDestaques(false);
+    };
+
+    fetchDestaques();
+  }, []);
+
   const handleShare = async () => {
     const urlSite = window.location.href;
 
-    if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    if (navigator.share) {
       try {
         await navigator.share({
           title: 'Minha Loja de Carro',
@@ -99,23 +155,59 @@ export default function Home({ session, tenant, adminLogo }) {
     }
   };
 
-  // Função CORRIGIDA e BLINDADA para compartilhar o veículo específico
+  // Função de Compartilhamento Unificada e Otimizada (Mobile + Desktop com Open Graph)
   const handleShareVeiculo = async (carro, slugLojaUrl) => {
-    // Garante a captura exata do slug da loja do carro
-    const slugReal = carro.tenants?.slug || carro.lojaSlug || slugLojaUrl || 'minhalojadecarro';
+    const slugReal = carro.tenants?.slug || carro.lojaSlug || slugLojaUrl;
     const baseUrl = window.location.origin;
     
-    // Monta a URL limpa e direta para o veículo
-    const urlVeiculo = `${baseUrl}/${slugReal}/veiculo/${carro.id}`;
+    const urlVeiculo = (slugReal && slugReal !== 'minhalojadecarro')
+      ? `${baseUrl}/${slugReal}/veiculo/${carro.id}`
+      : `${baseUrl}/veiculo/${carro.id}`;
 
     const titulo = `${carro.marca} ${carro.modelo} (${carro.ano_modelo || carro.ano_fabricacao})`;
-    const texto = `Confira este ${titulo} por ${Number(carro.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} na ${carro.lojaNome || 'Revenda Parceira'}! Veja os detalhes aqui:`;
+    const precoFormatado = Number(carro.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const nomeLoja = carro.lojaNome || 'Revenda Parceira';
+    
+    const fotoUrl = carro.foto_principal_url || (Array.isArray(carro.fotos) && carro.fotos.length > 0 ? carro.fotos[0] : null);
 
-    if (navigator.share) {
+    const textoLimpoSemUrl = `🚗 Confira este ${titulo} por ${precoFormatado} na ${nomeLoja}!\n\n#${carro.marca} #Carros #Seminovos #${nomeLoja.replace(/\s+/g, '')}`;
+    const textoLegendaCompleto = `🚗 Confira este ${titulo} por ${precoFormatado} na ${nomeLoja}!\n\n🔗 Veja mais detalhes e fotos aqui:\n${urlVeiculo}\n\n#${carro.marca} #Carros #Seminovos #${nomeLoja.replace(/\s+/g, '')}`;
+
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    if (isMobile && navigator.share) {
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(textoLegendaCompleto);
+        } catch (err) {
+          console.warn('Erro ao copiar em segundo plano:', err);
+        }
+      }
+
       try {
+        if (fotoUrl && navigator.canShare) {
+          try {
+            const response = await fetch(fotoUrl);
+            const blob = await response.blob();
+            const file = new File([blob], 'veiculo.jpg', { type: blob.type });
+            if (navigator.canShare({ files: [file] })) {
+              alert('📋 Legenda copiada!\n\nSe escolher o Facebook, basta segurar no campo de texto e tocar em "Colar".');
+              await navigator.share({
+                title: titulo,
+                text: textoLimpoSemUrl,
+                url: urlVeiculo,
+                files: [file],
+              });
+              return;
+            }
+          } catch (e) {
+            console.warn('Erro ao anexar imagem nativa:', e);
+          }
+        }
+
         await navigator.share({
           title: titulo,
-          text: texto,
+          text: textoLimpoSemUrl,
           url: urlVeiculo,
         });
         return;
@@ -124,19 +216,9 @@ export default function Home({ session, tenant, adminLogo }) {
       }
     }
 
-    if (navigator.clipboard && window.isSecureContext) {
-      try {
-        await navigator.clipboard.writeText(urlVeiculo);
-        alert(`Link do anúncio copiado com sucesso!\n${urlVeiculo}`);
-        return;
-      } catch (err) {
-        console.warn('Erro ao copiar link:', err);
-      }
-    }
-
     try {
       const textArea = document.createElement('textarea');
-      textArea.value = urlVeiculo;
+      textArea.value = textoLegendaCompleto;
       textArea.style.position = 'fixed';
       textArea.style.left = '-999999px';
       textArea.style.top = '-999999px';
@@ -144,74 +226,42 @@ export default function Home({ session, tenant, adminLogo }) {
       textArea.focus();
       textArea.select();
       
-      const successful = document.execCommand('copy');
+      const copiadoComSucesso = document.execCommand('copy');
       document.body.removeChild(textArea);
 
-      if (successful) {
-        alert(`Link do anúncio copiado com sucesso!\n${urlVeiculo}`);
-      } else {
-        alert(`Copie o link do veículo: ${urlVeiculo}`);
+      const urlFacebookSharer = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(urlVeiculo)}`;
+      window.open(urlFacebookSharer, '_blank', 'width=600,height=500');
+
+      if (copiadoComSucesso) {
+        console.log('Legenda copiada para a área de transferência com sucesso.');
       }
-    } catch {
-      alert(`Copie o link do veículo: ${urlVeiculo}`);
+    } catch (err) {
+      console.error('Erro ao processar partilha no desktop:', err);
+      const urlFacebookSharer = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(urlVeiculo)}`;
+      window.open(urlFacebookSharer, '_blank', 'width=600,height=500');
     }
   };
 
-  useEffect(() => {
-    const fetchDestaques = async () => {
-      setLoadingDestaques(true);
-
-      const { data, error } = await supabase
-        .from('veiculos')
-        .select(`
-          *,
-          tenants (
-            id,
-            nome_loja,
-            slug,
-            whatsapp
-          )
-        `)
-        .eq('status_destaque', 'em_evidencia')
-        .neq('status', 'Vendido')
-        .order('data_inicio_destaque', { ascending: true })
-        .limit(6);
-
-      if (error) {
-        console.error('Erro ao buscar destaques:', error);
-        setVeiculosDestaque([]);
-        setLoadingDestaques(false);
-        return;
-      }
-
-      const veiculosFormatados = (data || []).map(carro => {
-        const loja = Array.isArray(carro.tenants) ? carro.tenants[0] : carro.tenants;
-
-        return {
-          ...carro,
-          lojaNome: loja?.nome_loja ? String(loja.nome_loja).trim() : 'Revenda Parceira',
-          lojaSlug: loja?.slug ? String(loja.slug).trim() : carro.tenant_id,
-          lojaWhatsapp: loja?.whatsapp ? String(loja.whatsapp).replace(/\D/g, '') : ''
-        };
-      });
-
-      setVeiculosDestaque(veiculosFormatados);
-      setLoadingDestaques(false);
-    };
-
-    fetchDestaques();
-  }, []);
-
-  // Formatação segura do link do WhatsApp do Admin
-  const cleanAdminWhatsapp = adminWhatsapp ? `https://wa.me/55${adminWhatsapp.replace(/\D/g, '')}` : null;
-
-  // 2. RENDERIZAÇÃO CONDICIONAL APÓS TODOS OS HOOKS
-  if (session && !isAdmin) {
-    return <HomeLogistas session={session} tenant={tenant} />;
-  }
+  const tituloHome = "Minha Loja de Carro | Crie seu Site Profissional em minutos";
+  const descHome = "Tudo que o VENDEDOR precisa em um único lugar.";
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+      {/* Helmet para injetar dinamicamente a capa configurada pelo Admin ao compartilhar a raiz */}
+      <Helmet>
+        <title>{tituloHome}</title>
+        <meta name="description" content={descHome} />
+        <meta property="og:title" content={tituloHome} />
+        <meta property="og:description" content={descHome} />
+        {capaVitrineAdmin && <meta property="og:image" content={capaVitrineAdmin} />}
+        <meta property="og:url" content="https://www.minhalojadecarro.com/" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={tituloHome} />
+        <meta name="twitter:description" content={descHome} />
+        {capaVitrineAdmin && <meta name="twitter:image" content={capaVitrineAdmin} />}
+      </Helmet>
+
       {/* Banner Principal (Hero) */}
       <section className="max-w-7xl mx-auto px-6 pt-12 pb-8 flex flex-col items-center text-center space-y-6">
         <span className="inline-block px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold uppercase tracking-wider">
@@ -276,15 +326,15 @@ export default function Home({ session, tenant, adminLogo }) {
             </a>
           )}
 
-          {cleanAdminWhatsapp && (
+          {adminwhatsapp && (
             <a
-              href={cleanAdminWhatsapp}
+              href={`https://wa.me/${adminwhatsapp.replace(/\D/g, '')}?text=Olá,%20vim%20pelo%20site%20Minha%20Loja%20de%20Carro!`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-600 text-white font-medium text-sm hover:opacity-95 transition-all shadow-md hover:shadow-lg"
             >
               <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.124-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.334 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.124-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
               </svg>
               <span>WhatsApp</span>
             </a>
@@ -311,7 +361,7 @@ export default function Home({ session, tenant, adminLogo }) {
           </span>
 
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white mt-3 tracking-tight">
-            Destaques de Nossos Clientes - &quot;Abra sua Loja Agora mesmo&quot;
+            Destaques de Nossos Clientes
           </h2>
         </div>
 
@@ -370,43 +420,71 @@ export default function Home({ session, tenant, adminLogo }) {
                         </p>
                       </div>
 
-                      {/* Valores: Preço de Venda e Tabela FIPE lado a lado */}
-                      <div className="flex items-baseline justify-between pt-2">
-                        <div>
-                          <span className="text-[10px] text-gray-400 block uppercase tracking-wider">Valor</span>
-                          <span className="text-xl font-black text-green-400">
-                            {Number(carro.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                          </span>
-                        </div>
-                        {carro.valorfipe && (
-                          <div className="text-right">
-                            <span className="text-[10px] text-gray-400 block uppercase tracking-wider">FIPE</span>
-                            <span className="text-sm font-bold text-gray-300">
-                              {Number(carro.valorfipe).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
+                      {/* Valores: Condição de Financiamento em Destaque ou Preço à Vista */}
+                      <div className="pt-2">
+                        {carro.tipo_financiamento && carro.tipo_financiamento !== 'nenhum' && Number(carro.valor_parcela) > 0 ? (
+                          <div className="space-y-1.5 bg-gray-950/60 p-3 rounded-xl border border-gray-800/80">
+                            <div className="flex items-baseline justify-between">
+                              <div>
+                                <span className="text-[10px] text-amber-400 font-bold block uppercase tracking-wider">Entrada + Parcelas</span>
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className="text-lg font-black text-green-400">
+                                    {Number(carro.valor_entrada || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                  </span>
+                                  <span className="text-xs text-gray-400">+</span>
+                                  <span className="text-base font-extrabold text-white">
+                                    {carro.num_parcelas || 48}x {Number(carro.valor_parcela).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-baseline justify-between pt-1 border-t border-gray-800/50 text-[11px]">
+                              <span className="text-gray-400">À vista: <strong className="text-gray-200">{Number(carro.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span>
+                              
+                              {carro.valorfipe && (
+                                <span className="text-gray-400">FIPE: <strong className="text-gray-300">{Number(carro.valorfipe).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span>
+                              )}
+                            </div>
+
+                            <div className="text-right pt-0.5">
+                              <span className="text-[9px] text-amber-500/90 italic">*Sujeito a análise</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-baseline justify-between">
+                            <div>
+                              <span className="text-[10px] text-gray-400 block uppercase tracking-wider">Valor à Vista</span>
+                              <span className="text-xl font-black text-green-400">
+                                {Number(carro.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </span>
+                            </div>
+                            {carro.valorfipe && (
+                              <div className="text-right">
+                                <span className="text-[10px] text-gray-400 block uppercase tracking-wider">FIPE</span>
+                                <span className="text-sm font-bold text-gray-300">
+                                  {Number(carro.valorfipe).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Ações: Botão WhatsApp, Compartilhar Anúncio e Ver Loja */}
+                  {/* Ações: WhatsApp, Compartilhar e Ver Loja */}
                   <div className="p-6 pt-0 space-y-2">
                     <div className="grid grid-cols-2 gap-2">
-                      {/* Botão WhatsApp */}
                       <a
                         href={`https://wa.me/${whatsappLoja}?text=${mensagemWp}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="w-full bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-md"
                       >
-                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                          <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.124-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
-                        </svg>
-                        WhatsApp
+                        <span>WhatsApp</span>
                       </a>
 
-                      {/* Botão Compartilhar Anúncio */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -414,22 +492,18 @@ export default function Home({ session, tenant, adminLogo }) {
                           e.stopPropagation();
                           handleShareVeiculo(carro, slugLojaUrl);
                         }}
-                        className="w-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                        className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
                         title="Compartilhar Anúncio"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684m0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684" />
-                        </svg>
-                        Compartilhar
+                        <span>Compartilhar</span>
                       </button>
                     </div>
 
-                    {/* Botão Ver Loja */}
                     <button
                       onClick={() => {
                         navigate(`/${slugLojaUrl}`);
                       }}
-                      className="w-full bg-gray-950 hover:bg-gray-800 text-blue-400 hover:text-blue-300 border border-gray-800 text-xs font-bold py-3 rounded-xl transition flex items-center justify-center shadow-inner cursor-pointer"
+                      className="w-full bg-gray-100 hover:bg-gray-200 text-blue-900 border border-gray-300 text-xs font-black py-3 rounded-xl transition flex items-center justify-center shadow-md cursor-pointer"
                     >
                       VER LOJA
                     </button>

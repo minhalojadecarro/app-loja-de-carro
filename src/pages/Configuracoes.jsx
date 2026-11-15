@@ -281,23 +281,21 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
               <span style={{ fontSize: '13px', fontWeight: '600', color: '#60a5fa' }}>
                 {fotoFile ? fotoFile.name : 'Clique para alterar a foto de perfil'}
               </span>
-              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', marginBottom: '8px' }}>
                 Recomendado: Imagem quadrada (PNG ou JPG)
               </span>
 
-              <div className="relative overflow-hidden inline-block">
-                {/* Botão visual customizado que o usuário vê */}
-                <button type="button" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg">
-                  Selecionar Foto ou Abrir Galeria
-                </button>
+              <div style={{ position: 'relative', overflow: 'hidden', display: 'inline-block' }}>
+                <span className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg text-xs">
+                  Selecionar Foto
+                </span>
 
-                {/* Input real invisível por cima do botão, permitindo o toque direto do usuário */}
                 <input 
                   id="foto-upload"
                   type="file" 
                   accept="image/*" 
                   onChange={handleFotoChange} 
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
                 />
               </div>
             </label>
@@ -351,7 +349,7 @@ export default function Configuracoes({ session, tenant, onTenantUpdated }) {
               />
             </div>
 
-            {/* --- REDES SOCIAIS (NOVO) --- */}
+            {/* --- REDES SOCIAIS --- */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#ccc' }}>

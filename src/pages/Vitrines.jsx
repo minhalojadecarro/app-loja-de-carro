@@ -95,9 +95,23 @@ export default function Vitrines({ session, tenant, isAdmin, selectedStore }) {
   // Função para copiar o texto de anúncio individual do veículo para divulgação
   const copiarAnuncioVeiculo = (veiculo) => {
     const precoFormatado = Number(veiculo.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    const textoAnuncio = `🚗 *${veiculo.marca} ${veiculo.modelo}* (${veiculo.ano_modelo || veiculo.ano_fabricacao})\n` +
+    
+    // Adiciona o texto de financiamento na mensagem copiada se houver
+    let textoFinanciamento = '';
+    if (veiculo.tipo_financiamento && veiculo.tipo_financiamento !== 'nenhum' && Number(veiculo.valor_parcela) > 0) {
+      const entradaFmt = Number(veiculo.valor_entrada || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const parcelaFmt = Number(veiculo.valor_parcela).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      if (veiculo.tipo_financiamento === 'bancario') {
+        textoFinanciamento = `💳 *Financiamento Bancário:* Entrada de ${entradaFmt} + ${veiculo.num_parcelas || 48}x de ${parcelaFmt}\n`;
+      } else {
+        textoFinanciamento = `🔥 *Financiamento Próprio (Sem SPC/Serasa):* Entrada de ${entradaFmt} + ${veiculo.num_parcelas || 48}x de ${parcelaFmt}\n`;
+      }
+    }
+
+    const textoAnuncio = `🚗 *${veiculo.marca} ${veiculo.modelo} (${veiculo.ano_modelo || veiculo.ano_fabricacao})*\n` +
       `📌 Versão: ${veiculo.versao || 'Completo'}\n` +
-      `💰 Preço: *${precoFormatado}*\n` +
+      `💰 Preço à Vista: *${precoFormatado}*\n` +
+      textoFinanciamento +
       `${veiculo.quilometragem ? `🛣️ KM: ${veiculo.quilometragem.toLocaleString('pt-BR')} km\n` : ''}` +
       `\n📲 Confira mais detalhes e nosso estoque completo na vitrine:\n${linkVitrine}`;
 
@@ -148,7 +162,7 @@ export default function Vitrines({ session, tenant, isAdmin, selectedStore }) {
             <div className="flex flex-wrap gap-3 w-full md:w-auto">
               <button 
                 onClick={copiarLink}
-                className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-900/30"
+                className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-900/30 cursor-pointer"
               >
                 Copiar Link da Vitrine
               </button>
@@ -182,44 +196,103 @@ export default function Vitrines({ session, tenant, isAdmin, selectedStore }) {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {veiculosDaLoja.map((veiculo) => (
-                  <div key={veiculo.id} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-xl flex flex-col justify-between hover:border-gray-700 transition">
-                    <div>
-                      {veiculo.foto_principal_url ? (
-                        <img src={veiculo.foto_principal_url} alt={veiculo.modelo} className="h-56 w-full object-cover" />
-                      ) : (
-                        <div className="h-56 w-full bg-gray-800 flex items-center justify-center text-gray-500 text-sm">
-                          Sem Foto Principal
-                        </div>
-                      )}
-                      <div className="p-6">
-                        <span className="text-xs font-semibold bg-gray-800 text-gray-300 px-3 py-1 rounded-md">
-                          {veiculo.ano_modelo || veiculo.ano_fabricacao} {veiculo.combustivel ? `• ${veiculo.combustivel}` : ''}
-                        </span>
-                        <h4 className="font-bold text-white text-xl mt-3">
-                          {veiculo.marca} {veiculo.modelo}
-                        </h4>
-                        <p className="text-sm text-gray-400 mt-0.5">{veiculo.versao || ''}</p>
-                        <div className="mt-5 text-2xl font-black text-green-400">
-                          {Number(veiculo.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </div>
-                      </div>
-                    </div>
+                {veiculosDaLoja.map((veiculo) => {
+                  const temFinanciamento = veiculo.tipo_financiamento && veiculo.tipo_financiamento !== 'nenhum' && Number(veiculo.valor_parcela) > 0;
 
-                    <div className="p-6 pt-0 flex flex-col gap-2">
-                      <button
-                        onClick={() => copiarAnuncioVeiculo(veiculo)}
-                        className="w-full bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-800/60 font-bold text-xs py-3 rounded-xl transition flex items-center justify-center gap-2"
-                      >
-                        📋 Copiar Anúncio para Redes Sociais
-                      </button>
-                      <div className="py-2 bg-gray-950/60 px-4 rounded-xl border border-gray-800/60 text-xs text-gray-400 flex justify-between items-center">
-                        <span>Cor: <strong className="text-gray-200">{veiculo.cor || 'N/I'}</strong></span>
-                        <span>KM: <strong className="text-gray-200">{veiculo.quilometragem ? veiculo.quilometragem.toLocaleString('pt-BR') : '0'}</strong></span>
+                  return (
+                    <div key={veiculo.id} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-xl flex flex-col justify-between hover:border-gray-700 transition">
+                      <div>
+                        {veiculo.foto_principal_url ? (
+                          <img src={veiculo.foto_principal_url} alt={veiculo.modelo} className="h-56 w-full object-cover" />
+                        ) : (
+                          <div className="h-56 w-full bg-gray-800 flex items-center justify-center text-gray-500 text-sm">
+                            Sem Foto Principal
+                          </div>
+                        )}
+                        <div className="p-6 space-y-4">
+                          <span className="text-xs font-semibold bg-gray-800 text-gray-300 px-3 py-1 rounded-md">
+                            {veiculo.ano_modelo || veiculo.ano_fabricacao} {veiculo.combustivel ? `• ${veiculo.combustivel}` : ''}
+                          </span>
+                          <div>
+                            <h4 className="font-bold text-white text-xl mt-2">
+                              {veiculo.marca} {veiculo.modelo}
+                            </h4>
+                            <p className="text-sm text-gray-400 mt-0.5">{veiculo.versao || ''}</p>
+                          </div>
+
+                          {/* Valores: Condição de Financiamento ou Preço à Vista */}
+                          <div className="pt-1">
+                            {temFinanciamento ? (
+                              <div className="space-y-1.5 bg-gray-950/60 p-3 rounded-xl border border-gray-800/80">
+                                <div>
+                                  <span className={`text-[10px] font-bold block uppercase tracking-wider ${veiculo.tipo_financiamento === 'bancario' ? 'text-blue-400' : 'text-amber-400'}`}>
+                                    {veiculo.tipo_financiamento === 'bancario'
+                                      ? '🏦 Financiamento Bancário'
+                                      : '🔥 Financiamento Próprio • Sem SPC/Serasa'}
+                                  </span>
+                                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                                    <span className="text-lg font-black text-green-400">
+                                      {Number(veiculo.valor_entrada || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
+                                    <span className="text-xs text-gray-400">+</span>
+                                    <span className="text-base font-extrabold text-white">
+                                      {veiculo.num_parcelas || 48}x {Number(veiculo.valor_parcela).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-baseline justify-between pt-1 border-t border-gray-800/50 text-[11px]">
+                                  <span className="text-gray-400">
+                                    À vista: <strong className="text-gray-200">{Number(veiculo.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                                  </span>
+                                  {veiculo.valorfipe && (
+                                    <span className="text-gray-400">
+                                      FIPE: <strong className="text-gray-300">{Number(veiculo.valorfipe).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="text-right pt-0.5">
+                                  <span className="text-[9px] text-amber-500/90 italic">*Sujeito a análise</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-baseline justify-between">
+                                <div>
+                                  <span className="text-[10px] text-gray-400 block uppercase tracking-wider">Valor à Vista</span>
+                                  <span className="text-xl font-black text-green-400">
+                                    {Number(veiculo.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                  </span>
+                                </div>
+                                {veiculo.valorfipe && (
+                                  <div className="text-right">
+                                    <span className="text-[10px] text-gray-400 block uppercase tracking-wider">FIPE</span>
+                                    <span className="text-sm font-bold text-gray-300">
+                                      {Number(veiculo.valorfipe).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-6 pt-0 flex flex-col gap-2">
+                        <button
+                          onClick={() => copiarAnuncioVeiculo(veiculo)}
+                          className="w-full bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-800/60 font-bold text-xs py-3 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          📋 Copiar Anúncio para Redes Sociais
+                        </button>
+                        <div className="py-2 bg-gray-950/60 px-4 rounded-xl border border-gray-800/60 text-xs text-gray-400 flex justify-between items-center">
+                          <span>Cor: <strong className="text-gray-200">{veiculo.cor || 'N/I'}</strong></span>
+                          <span>KM: <strong className="text-gray-200">{veiculo.quilometragem ? veiculo.quilometragem.toLocaleString('pt-BR') : '0'}</strong></span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

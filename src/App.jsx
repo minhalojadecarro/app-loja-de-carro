@@ -14,15 +14,14 @@ function AppContent() {
   const [adminNome, setAdminNome] = useState('Minha Loja de Carro');
   const [adminCapaOG, setAdminCapaOG] = useState('https://motyshnlombyzidqhjgk.supabase.co/storage/v1/object/public/veiculos-fotos/1793455032740_14zpk9g933q.jpg'); // <--- Estado para a capa dinâmica do Admin
   
-
   // Estados para as redes sociais globais do admin no rodapé
   const [adminInstagram, setAdminInstagram] = useState('https://instagram.com/minhalojadecarro');
   const [adminFacebook, setAdminFacebook] = useState('');
-  const rawWhatsapp = tenantData?.whatsapp || '5592991701002'; // Seu número padrão do Admin na raiz
 
-const whatsappAtivo = rawWhatsapp 
-  ? `https://wa.me/${rawWhatsapp.replace(/\D/g, '')}` 
-  : null;
+  const rawWhatsapp = tenantData?.whatsapp || '5592991701002'; // Seu número padrão do Admin na raiz
+  const whatsappAtivo = rawWhatsapp 
+    ? `https://wa.me/${rawWhatsapp.replace(/\D/g, '')}` 
+    : null;
   
   const [selectedStore, setSelectedStore] = useState(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -210,10 +209,6 @@ const whatsappAtivo = rawWhatsapp
     : (tenantData?.nome_loja || adminNome);
 
   // Definição dinâmica da imagem de capa OG para o Helmet na raiz/home
-  const imagemCapaOGAtiva = (!session || isAdmin)
-    ? adminCapaOG
-    : (tenantData?.capa_vitrine_url || adminCapaOG);
-
   const fotoPerfilUser = userProfile?.foto_perfil_url || null;
 
   const currentPath = location.pathname;
@@ -236,10 +231,15 @@ const whatsappAtivo = rawWhatsapp
         <title>{nomeExibicao} | Crie seu Site Profissional em minutos</title>
         <meta property="og:title" content={`${nomeExibicao} | Crie seu Site Profissional em minutos`} />
         <meta property="og:description" content="Tudo que o VENDEDOR precisa em um único lugar." />
-        <meta property="og:image" content={imagemCapaOGAtiva} />
+        <meta property="og:image" content={adminCapaOG} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:url" content={window.location.href} />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={`${nomeExibicao} | Crie seu Site Profissional em minutos`} />
         <meta name="twitter:description" content="Tudo que o VENDEDOR precisa em um único lugar." />
-        <meta name="twitter:image" content={imagemCapaOGAtiva} />
+        <meta name="twitter:image" content={adminCapaOG} />
       </Helmet>
 
       {/* Navbar Superior Fixa */}
@@ -324,7 +324,6 @@ const whatsappAtivo = rawWhatsapp
               </>
             )}
 
-            {/* Link Único de Minha Vitrine (Exibido se houver sessão e tenant/slug configurado) */}
             {session && tenantData?.slug && (
               <Link
                 to={`/${tenantData.slug}`}
@@ -393,7 +392,7 @@ const whatsappAtivo = rawWhatsapp
                 {profileMenuOpen && (
                   <div 
                     onMouseLeave={() => setProfileMenuOpen(false)}
-                    className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl py-3 z-50"
+                    className="absolute right-0 mt-2 w-64 max-h-[85vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl py-3 z-50 scrollbar-thin scrollbar-thumb-slate-700"
                   >
                     <div className="px-4 py-2 border-b border-slate-800 mb-2">
                       <p className="text-xs font-bold text-white truncate">{nomeExibicao}</p>
@@ -403,7 +402,6 @@ const whatsappAtivo = rawWhatsapp
                       </span>
                     </div>
 
-                    {/* Menu de Navegação do Dropdown */}
                     <div className="px-3 py-1 mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
                       Menu de Navegação
                     </div>
@@ -438,7 +436,6 @@ const whatsappAtivo = rawWhatsapp
                       </Link>
                     )}
 
-                    {/* Minha Vitrine unificada logo após o Painel */}
                     {session && tenantData?.slug && (
                       <Link
                         to={`/${tenantData.slug}`}
@@ -530,7 +527,10 @@ const whatsappAtivo = rawWhatsapp
                     <div className="border-t border-slate-800 my-2"></div>
 
                     <button
-                      onClick={handleLogout}
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        handleLogout();
+                      }}
                       className="w-full text-left px-4 py-2.5 text-xs font-bold text-red-400 hover:bg-red-600/20 transition flex items-center gap-2.5 cursor-pointer"
                     >
                       <span>🚪</span> Sair da Conta
@@ -601,7 +601,6 @@ const whatsappAtivo = rawWhatsapp
             <p>© {new Date().getFullYear()} Minha Loja de Carro. Todos os direitos reservados.</p>
           </div>
 
-          {/* REDES SOCIAIS E LINKS INSTITUCIONAIS */}
           <div className="flex items-center gap-4">
             {instagramAtivo && (
               <a 
@@ -631,7 +630,6 @@ const whatsappAtivo = rawWhatsapp
               </a>
             )}
 
-            {/* WHATSAPP */}
             {whatsappAtivo && (
               <a 
                 href={whatsappAtivo} 
